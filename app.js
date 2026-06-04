@@ -1,6 +1,6 @@
 const STORAGE_KEY = "pccc-csql.facilities.v1";
 const DEFAULT_CITY = "TP. Hồ Chí Minh";
-const GOOGLE_SHEET_ENDPOINT = "https://script.google.com/macros/s/AKfycbyufwEcP9sSMew21bRwKvRzoki4SZotLTQoGuzHbslvWNXvBe1sp4RAt7ChkP6kONaL/exec";
+const GOOGLE_SHEET_ENDPOINT = "https://script.google.com/macros/s/AKfycbzfYc-1Oea0GciABjnXGZyMHqVgXzqIvAclYl-PIFNtQfyOqA2me9171YQndL88yuqL/exec";
 const IS_ADMIN_MODE = new URLSearchParams(window.location.search).get("admin") === "1";
 
 const DEFAULT_MANAGEMENT_INFO = {
@@ -1231,6 +1231,52 @@ function cacheSheetLookupMatches(matches) {
   return cached.map((record) => findLocalRecordForSheetFacility(record) || record);
 }
 
+function lookupFacilityFromSheetByJsonp(lookup, timeoutMs = 12000) {
+  return new Promise((resolve, reject) => {
+    if (!GOOGLE_SHEET_ENDPOINT) {
+      reject(new Error("Chưa cấu hình Google Sheet endpoint."));
+      return;
+    }
+
+    const callbackName = `pcccLookupCallback_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const script = document.createElement("script");
+    const timeout = window.setTimeout(() => {
+      cleanup();
+      reject(new Error("Quá thời gian chờ phản hồi từ Google Sheet."));
+    }, timeoutMs);
+
+    function cleanup() {
+      window.clearTimeout(timeout);
+      delete window[callbackName];
+      if (script.parentNode) {
+        script.parentNode.removeChild(script);
+      }
+    }
+
+    window[callbackName] = (result) => {
+      cleanup();
+      resolve(result);
+    };
+
+    try {
+      const url = new URL(GOOGLE_SHEET_ENDPOINT);
+      url.searchParams.set("mode", "lookup");
+      url.searchParams.set("type", lookup.type);
+      url.searchParams.set("value", lookup.value);
+      url.searchParams.set("callback", callbackName);
+      script.src = url.toString();
+      script.onerror = () => {
+        cleanup();
+        reject(new Error("Không tải được dữ liệu tra cứu từ Google Sheet."));
+      };
+      document.body.appendChild(script);
+    } catch (error) {
+      cleanup();
+      reject(error);
+    }
+  });
+}
+
 async function lookupFacilityFromSheet(digits) {
   const lookup = { type: getLookupType(digits), value: digits };
   const payload = {
@@ -1240,24 +1286,30 @@ async function lookupFacilityFromSheet(digits) {
     lookup,
   };
 
+  // Google Apps Script Web App thường không cho browser đọc response POST/GET qua CORS.
+  // Vì vậy lookup ưu tiên JSONP qua doGet(callback=...), để điện thoại/Zalo vẫn tra cứu được.
   try {
-    const response = await fetch(GOOGLE_SHEET_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "text/plain;charset=utf-8",
-      },
-      body: JSON.stringify(payload),
-    });
-    if (!response.ok) throw new Error(`Lookup POST failed: ${response.status}`);
-    return await response.json();
-  } catch (error) {
-    const url = new URL(GOOGLE_SHEET_ENDPOINT);
-    url.searchParams.set("mode", "lookup");
-    url.searchParams.set("type", lookup.type);
-    url.searchParams.set("value", lookup.value);
-    const response = await fetch(url.toString(), { method: "GET" });
-    if (!response.ok) throw error;
-    return response.json();
+    return await lookupFacilityFromSheetByJsonp(lookup);
+  } catch (jsonpError) {
+    try {
+      const response = await fetch(GOOGLE_SHEET_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/plain;charset=utf-8",
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) throw new Error(`Lookup POST failed: ${response.status}`);
+      return await response.json();
+    } catch (postError) {
+      const url = new URL(GOOGLE_SHEET_ENDPOINT);
+      url.searchParams.set("mode", "lookup");
+      url.searchParams.set("type", lookup.type);
+      url.searchParams.set("value", lookup.value);
+      const response = await fetch(url.toString(), { method: "GET" });
+      if (!response.ok) throw postError;
+      return response.json();
+    }
   }
 }
 

@@ -45,6 +45,36 @@ const FIELDS = [
 const NUMBER_FIELDS = ["soTang", "khoiTich", "tongDienTichSan"];
 const CHECKBOX_FIELDS = ["viPhamXayDung", "viPhamDangKyKinhDoanh", "viPhamPCCC"];
 const PHONE_FIELDS = ["sdtNguoiDungDau", "sdtNguoiThuongTruc", "sdtCanBoQuanLy"];
+const ACCOUNT_LOOKUP_FIELDS = [
+  "soTaiKhoanPCCC",
+  "soTaiKhoanCSDL",
+  "soTaiKhoan",
+  "accountPCCC",
+  "Số tài khoản trên hệ thống CSDL Quốc gia về PCCC",
+  "Số tài khoản CSDL Quốc gia về PCCC",
+  "Số tài khoản CSDL Quốc gia PCCC",
+  "Số tài khoản PCCC",
+  "So tai khoan tren he thong CSDL Quoc gia ve PCCC",
+];
+const PHONE_LOOKUP_FIELDS = [
+  "sdtNguoiDungDau",
+  "soDienThoaiNguoiDungDau",
+  "SĐT người đứng đầu cơ sở",
+  "Số điện thoại người đứng đầu cơ sở",
+  "SDT người đứng đầu cơ sở",
+  "SĐT người đứng đầu",
+  "sdtNguoiThuongTruc",
+  "soDienThoaiNguoiThuongTruc",
+  "Số điện người thường xuyên có mặt",
+  "Số điện thoại người thường xuyên có mặt",
+  "SĐT người thường xuyên có mặt",
+  "SDT người thường xuyên có mặt",
+  "sdtCanBoQuanLy",
+  "soDienThoaiLienHe",
+  "Số điện thoại liên hệ",
+  "SĐT cán bộ quản lý",
+  "Số điện thoại cán bộ quản lý",
+];
 
 const SECTOR_OPTIONS = [
   ["I", "I - Lĩnh vực nhà ở, trụ sở làm việc, văn phòng, nhà đa năng"],
@@ -82,6 +112,10 @@ const EXCEL_COLUMN_ALIASES = {
     "so tai khoan csdl quoc gia pccc",
     "so tai khoan csdl quoc gia ve pccc",
     "so tai khoan tren he thong csdl quoc gia ve pccc",
+    "so tai khoan tren he thong csdl quoc gia pccc",
+    "so tai khoan tren he thong co so du lieu quoc gia ve pccc",
+    "so tai khoan co so du lieu quoc gia ve pccc",
+    "so tai khoan co so du lieu quoc gia pccc",
     "tai khoan pccc",
   ],
   tenCoSo: ["tencoso", "ten co so"],
@@ -114,15 +148,29 @@ const EXCEL_COLUMN_ALIASES = {
   ngayQuyetDinhDinhChi: ["ngayquyetdinhdinhchi", "ngay quyet dinh dinh chi", "ngay ban hanh quyet dinh"],
   donViQuanLy: ["donviquanly", "don vi quan ly", "thong tin don vi quan ly don vi quan ly"],
   canBoQuanLy: ["canboquanly", "can bo quan ly", "ten can bo quan ly"],
-  sdtCanBoQuanLy: ["sdtcanboquanly", "sdt can bo quan ly", "so dien thoai can bo quan ly", "so dien thoai lien he"],
+  sdtCanBoQuanLy: [
+    "sdtcanboquanly",
+    "sdt can bo quan ly",
+    "so dien thoai can bo quan ly",
+    "so dien thoai lien he",
+  ],
   nguoiDungDau: ["nguoidungdau", "nguoi dung dau", "chu co so", "dai dien"],
-  sdtNguoiDungDau: ["sdtnguoidungdau", "sdt nguoi dung dau", "sdt nguoi dung dau co so", "so dien thoai nguoi dung dau"],
+  sdtNguoiDungDau: [
+    "sdtnguoidungdau",
+    "sdt nguoi dung dau",
+    "sdt nguoi dung dau co so",
+    "so dien thoai nguoi dung dau",
+    "so dien thoai nguoi dung dau co so",
+    "sodienthoainguoidungdau",
+  ],
   nguoiThuongTruc: ["nguoithuongtruc", "nguoi thuong truc"],
   sdtNguoiThuongTruc: [
     "sdtnguoithuongtruc",
     "sdt nguoi thuong truc",
     "so dien thoai thuong truc",
     "so dien nguoi thuong xuyen co mat",
+    "so dien thoai nguoi thuong xuyen co mat",
+    "sdt nguoi thuong xuyen co mat",
   ],
   noiDungCanLuuY: ["noidungcanluuy", "noi dung can luu y", "ghi chu", "luu y"],
 };
@@ -151,6 +199,7 @@ const cancelExcelImportBtn = document.querySelector("#cancelExcelImportBtn");
 const excelPreview = document.querySelector("#excelPreview");
 const syncAllSheetBtn = document.querySelector("#syncAllSheetBtn");
 const syncAllStatus = document.querySelector("#syncAllStatus");
+const lookupDebugBtn = document.querySelector("#lookupDebugBtn");
 const statTotal = document.querySelector("#statTotal");
 const wardStats = document.querySelector("#wardStats");
 const sectorStats = document.querySelector("#sectorStats");
@@ -187,6 +236,10 @@ let facilities = loadFacilities();
 let editingId = null;
 let selectedExcelFile = null;
 let pendingImportPreview = null;
+
+if (normalizeExistingFacilitiesForLookup()) {
+  saveFacilities();
+}
 
 function fillSelect(selectId, options, placeholder = "") {
   const select = document.querySelector(`#${selectId}`);
@@ -236,6 +289,36 @@ function withSyncDefaults(record) {
     lastSyncedAt: record.lastSyncedAt || "",
     syncError: record.syncError || "",
   };
+}
+
+function normalizeExistingFacilitiesForLookup() {
+  let changed = false;
+  const phoneFallbacks = {
+    sdtNguoiDungDau: ["sdtNguoiDungDau", "soDienThoaiNguoiDungDau"],
+    sdtNguoiThuongTruc: ["sdtNguoiThuongTruc", "soDienThoaiNguoiThuongTruc"],
+    sdtCanBoQuanLy: ["sdtCanBoQuanLy", "soDienThoaiLienHe"],
+  };
+
+  facilities = facilities.map((record) => {
+    const next = { ...record };
+    const account = getAccountLookupKey(record);
+    if (account && next.soTaiKhoanPCCC !== account) {
+      next.soTaiKhoanPCCC = account;
+      changed = true;
+    }
+
+    Object.entries(phoneFallbacks).forEach(([targetField, sourceFields]) => {
+      const phone = getFirstDigitsFromFields(record, sourceFields, normalizePhoneDigits);
+      if (phone && next[targetField] !== phone) {
+        next[targetField] = phone;
+        changed = true;
+      }
+    });
+
+    return withSyncDefaults(next);
+  });
+
+  return changed;
 }
 
 function applyManagementDefaults() {
@@ -298,7 +381,33 @@ function toNumberOrEmpty(value) {
 }
 
 function normalizeDigits(value) {
-  return String(value ?? "").replace(/\D/g, "");
+  return String(value ?? "").trim().replace(/\D/g, "");
+}
+
+function normalizePhoneDigits(value) {
+  const digits = normalizeDigits(value);
+  if (digits.length === 9 && !digits.startsWith("0")) return `0${digits}`;
+  return digits;
+}
+
+function normalizePhone(value) {
+  return normalizePhoneDigits(value);
+}
+
+function getFirstDigitsFromFields(record, fields, normalizer = normalizeDigits) {
+  for (const field of fields) {
+    const digits = normalizer(record?.[field]);
+    if (digits) return digits;
+  }
+  return "";
+}
+
+function getAccountLookupKey(record) {
+  return getFirstDigitsFromFields(record, ACCOUNT_LOOKUP_FIELDS, normalizeDigits);
+}
+
+function getPhoneLookupKeys(record) {
+  return PHONE_LOOKUP_FIELDS.map((field) => normalizePhoneDigits(record?.[field])).filter(Boolean);
 }
 
 function normalizeBoolean(value) {
@@ -352,8 +461,10 @@ function getFormData() {
       data[field] = toNumberOrEmpty(input.value);
     } else if (field === "tenCoSo") {
       data[field] = normalizeFacilityName(input.value);
-    } else if (field === "soTaiKhoanPCCC" || PHONE_FIELDS.includes(field)) {
+    } else if (field === "soTaiKhoanPCCC") {
       data[field] = normalizeDigits(input.value);
+    } else if (PHONE_FIELDS.includes(field)) {
+      data[field] = normalizePhoneDigits(input.value);
     } else {
       data[field] = normalizeText(input.value);
     }
@@ -397,7 +508,7 @@ function validateFacility(data, currentId = null) {
   });
 
   const duplicate = data.soTaiKhoanPCCC
-    ? facilities.find((item) => item.soTaiKhoanPCCC === data.soTaiKhoanPCCC && item.id !== currentId)
+    ? facilities.find((item) => getAccountLookupKey(item) === data.soTaiKhoanPCCC && item.id !== currentId)
     : null;
 
   return { errors: [...new Set(errors)], duplicate };
@@ -456,15 +567,15 @@ function findImportDuplicate(data, existingRecords = facilities) {
   for (const [field, value] of keyChecks) {
     const normalized = normalizeText(value);
     if (!normalized) continue;
-    const record = existingRecords.find((item) => normalizeText(item[field]) === normalized);
+    const record = field === "soTaiKhoanPCCC"
+      ? existingRecords.find((item) => getAccountLookupKey(item) === normalizeDigits(normalized))
+      : existingRecords.find((item) => normalizeText(item[field]) === normalized);
     if (record) return { record, matchType: field, multiple: false };
   }
 
-  const phoneValues = [data.sdtNguoiDungDau, data.sdtNguoiThuongTruc].filter(Boolean);
+  const phoneValues = [data.sdtNguoiDungDau, data.sdtNguoiThuongTruc].map(normalizePhoneDigits).filter(Boolean);
   for (const phone of phoneValues) {
-    const matches = existingRecords.filter(
-      (item) => item.sdtNguoiDungDau === phone || item.sdtNguoiThuongTruc === phone || item.sdtCanBoQuanLy === phone,
-    );
+    const matches = existingRecords.filter((item) => getPhoneLookupKeys(item).includes(phone));
     if (matches.length === 1) return { record: matches[0], matchType: "phone", multiple: false };
     if (matches.length > 1) return { record: null, matchType: "phone", multiple: true };
   }
@@ -494,6 +605,39 @@ function setSyncAllStatus(text, type = "info") {
 function clearSyncAllStatus() {
   syncAllStatus.textContent = "";
   syncAllStatus.className = "sync-all-status hidden";
+}
+
+function debugLookupData() {
+  const summary = facilities.reduce(
+    (result, record) => {
+      const account = getAccountLookupKey(record);
+      const headPhone = normalizePhoneDigits(record.sdtNguoiDungDau || record.soDienThoaiNguoiDungDau);
+      const standbyPhone = normalizePhoneDigits(record.sdtNguoiThuongTruc || record.soDienThoaiNguoiThuongTruc);
+      const officerPhone = normalizePhoneDigits(record.sdtCanBoQuanLy || record.soDienThoaiLienHe);
+
+      if (account) result.hasAccount += 1;
+      if (headPhone) result.hasHeadPhone += 1;
+      if (standbyPhone) result.hasStandbyPhone += 1;
+      if (!account && !headPhone && !standbyPhone && !officerPhone) result.noLookupKey += 1;
+
+      result.samples.push({
+        maCoSo: record.maCoSo || "",
+        tenCoSo: record.tenCoSo || "",
+        soTaiKhoanPCCC: account,
+        sdtNguoiDungDau: headPhone,
+        sdtNguoiThuongTruc: standbyPhone,
+        sdtCanBoQuanLy: officerPhone,
+      });
+      return result;
+    },
+    { total: facilities.length, hasAccount: 0, hasHeadPhone: 0, hasStandbyPhone: 0, noLookupKey: 0, samples: [] },
+  );
+
+  console.table(summary.samples.slice(0, 20));
+  setMessage(
+    `Kiểm tra dữ liệu tra cứu: tổng ${summary.total}, có số tài khoản ${summary.hasAccount}, có SĐT người đứng đầu ${summary.hasHeadPhone}, có SĐT thường trực ${summary.hasStandbyPhone}, không có key tra cứu ${summary.noLookupKey}. Xem console.table để kiểm tra mẫu.`,
+    "success",
+  );
 }
 
 function formatConfirmationTime(value) {
@@ -949,13 +1093,14 @@ function hasMeaningfulFormData() {
 }
 
 function getLookupSummary(record) {
+  const account = getAccountLookupKey(record);
   return `
     <div class="lookup-summary">
       <strong>${escapeHtml(record.tenCoSo)}</strong>
       <span>Mã cơ sở: ${escapeHtml(record.maCoSo || "")}</span>
       <span>Phường/Xã: ${escapeHtml(record.phuongXa || "")}</span>
       <span>Địa chỉ: ${escapeHtml(record.diaChi || "")}</span>
-      ${record.soTaiKhoanPCCC ? `<span>Số tài khoản PCCC: ${escapeHtml(record.soTaiKhoanPCCC)}</span>` : ""}
+      ${account ? `<span>Số tài khoản PCCC: ${escapeHtml(account)}</span>` : ""}
     </div>
   `;
 }
@@ -1008,19 +1153,19 @@ function searchPublicRecords(query) {
   }
 
   if (digits.length === 13) {
-    renderLookupResults(facilities.filter((record) => record.soTaiKhoanPCCC === digits));
+    renderLookupResults(facilities.filter((record) => getAccountLookupKey(record) === digits));
     return;
   }
 
-  const primaryMatches = facilities.filter(
-    (record) => record.sdtNguoiDungDau === digits || record.sdtNguoiThuongTruc === digits,
+  const primaryMatches = facilities.filter((record) =>
+    [record.sdtNguoiDungDau, record.sdtNguoiThuongTruc].map(normalizePhoneDigits).includes(digits),
   );
   if (primaryMatches.length) {
     renderLookupResults(primaryMatches);
     return;
   }
 
-  renderLookupResults(facilities.filter((record) => record.sdtCanBoQuanLy === digits));
+  renderLookupResults(facilities.filter((record) => getPhoneLookupKeys(record).includes(digits)));
 }
 
 function loadLookupRecord(id) {
@@ -1384,8 +1529,10 @@ function mapExcelRowToFacility(row, headers) {
       data[field] = toNumberOrEmpty(value);
     } else if (field === "tenCoSo") {
       data[field] = normalizeFacilityName(value);
-    } else if (field === "soTaiKhoanPCCC" || PHONE_FIELDS.includes(field)) {
+    } else if (field === "soTaiKhoanPCCC") {
       data[field] = normalizeDigits(value);
+    } else if (PHONE_FIELDS.includes(field)) {
+      data[field] = normalizePhoneDigits(value);
     } else if (field === "ngayQuyetDinhDinhChi") {
       data[field] = normalizeExcelDate(value);
     } else {
@@ -1636,6 +1783,7 @@ function confirmImport() {
   });
 
   facilities = nextFacilities;
+  normalizeExistingFacilitiesForLookup();
   saveFacilities();
   renderFacilities();
   setMessage(
@@ -1654,8 +1802,10 @@ function sanitizeImportedRecord(record) {
       data[field] = toNumberOrEmpty(record[field]);
     } else if (field === "tenCoSo") {
       data[field] = normalizeFacilityName(record[field]);
-    } else if (field === "soTaiKhoanPCCC" || PHONE_FIELDS.includes(field)) {
+    } else if (field === "soTaiKhoanPCCC") {
       data[field] = normalizeDigits(record[field]);
+    } else if (PHONE_FIELDS.includes(field)) {
+      data[field] = normalizePhoneDigits(record[field]);
     } else {
       data[field] = normalizeText(record[field]);
     }
@@ -1709,6 +1859,7 @@ async function importJson(event) {
       imported += 1;
     });
 
+    normalizeExistingFacilitiesForLookup();
     saveFacilities();
     renderFacilities();
     setMessage(
@@ -1831,6 +1982,7 @@ function init() {
   confirmExcelImportBtn.addEventListener("click", confirmImport);
   cancelExcelImportBtn.addEventListener("click", resetExcelImport);
   syncAllSheetBtn.addEventListener("click", syncAllFacilitiesToGoogleSheet);
+  lookupDebugBtn.addEventListener("click", debugLookupData);
   updateDuplicatesInput.addEventListener("change", () => {
     if (selectedExcelFile) {
       confirmExcelImportBtn.disabled = true;

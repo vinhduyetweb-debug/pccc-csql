@@ -16,7 +16,7 @@
 const SHEET_NAME = "PCCC-CSQL";
 
 const HEADERS = [
-  "Thời gian đồng bộ",
+  "id",
   "Mã cơ sở",
   "Số hồ sơ",
   "Số tài khoản PCCC",
@@ -42,32 +42,54 @@ const HEADERS = [
   "Nội dung cần lưu ý",
   "Ngày tạo",
   "Ngày cập nhật",
+  "Trạng thái bản ghi",
+  "Thời gian đồng bộ",
 ];
 
 function doPost(e) {
   try {
     const payload = JSON.parse(e.postData.contents || "{}");
-    if (payload.action !== "UPSERT_FACILITY" || !payload.facility) {
-      return jsonResponse({ success: false, error: "Invalid payload" });
-    }
-
-    const facility = payload.facility;
     const sheet = getOrCreateSheet();
-    ensureHeaders(sheet);
+    ensureHeader(sheet);
 
-    const rowValues = buildRow(payload.syncedAt, facility);
-    const rowIndex = findRowByPcccAccount(sheet, facility.soTaiKhoanPCCC);
-
-    if (rowIndex > 0) {
-      sheet.getRange(rowIndex, 1, 1, HEADERS.length).setValues([rowValues]);
-    } else {
-      sheet.appendRow(rowValues);
+    if (payload.action === "UPSERT_FACILITY") {
+      return handleUpsert(sheet, payload);
     }
 
-    return jsonResponse({ success: true, action: rowIndex > 0 ? "updated" : "created" });
+    if (payload.action === "DELETE_FACILITY") {
+      return handleDelete(sheet, payload);
+    }
+
+    return jsonResponse({ success: false, message: "Action không hợp lệ" });
   } catch (error) {
-    return jsonResponse({ success: false, error: error.message });
+    return jsonResponse({ success: false, message: error.message });
   }
+}
+
+function handleUpsert(sheet, payload) {
+  const facility = payload.facility || {};
+  const row = findRowByKeys(sheet, facility);
+  const rowValues = buildRow(payload.syncedAt, facility, "active");
+
+  if (row > 0) {
+    sheet.getRange(row, 1, 1, HEADERS.length).setValues([rowValues]);
+    return jsonResponse({ success: true, action: "updated", row });
+  }
+
+  sheet.appendRow(rowValues);
+  return jsonResponse({ success: true, action: "created", row: sheet.getLastRow() });
+}
+
+function handleDelete(sheet, payload) {
+  const facility = payload.facility || {};
+  const row = findRowByKeys(sheet, facility);
+
+  if (row > 0) {
+    sheet.deleteRow(row);
+    return jsonResponse({ success: true, action: "deleted", row });
+  }
+
+  return jsonResponse({ success: false, message: "Không tìm thấy dòng cần xóa" });
 }
 
 function getOrCreateSheet() {
@@ -75,29 +97,54 @@ function getOrCreateSheet() {
   return spreadsheet.getSheetByName(SHEET_NAME) || spreadsheet.insertSheet(SHEET_NAME);
 }
 
-function ensureHeaders(sheet) {
-  const firstRow = sheet.getRange(1, 1, 1, HEADERS.length).getValues()[0];
-  const hasHeader = firstRow.some((value) => String(value || "").trim());
-  if (!hasHeader) {
+function ensureHeader(sheet) {
+  const width = Math.max(sheet.getLastColumn(), HEADERS.length);
+  const current = sheet.getRange(1, 1, 1, width).getValues()[0].map((value) => String(value || "").trim());
+  const currentCanonical = current.slice(0, HEADERS.length).join("||");
+  const expectedCanonical = HEADERS.join("||");
+
+  if (currentCanonical !== expectedCanonical) {
     sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
   }
 }
 
-function findRowByPcccAccount(sheet, soTaiKhoanPCCC) {
-  const account = String(soTaiKhoanPCCC || "").trim();
-  if (!account) return -1;
-
+function findRowByKeys(sheet, facility) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return -1;
 
-  const values = sheet.getRange(2, 4, lastRow - 1, 1).getValues();
-  const index = values.findIndex((row) => String(row[0] || "").trim() === account);
-  return index >= 0 ? index + 2 : -1;
+  const headers = getHeaders(sheet);
+  const idCol = headers.indexOf("id");
+  const maCoSoCol = headers.indexOf("Mã cơ sở");
+  const accountCol = headers.indexOf("Số tài khoản PCCC");
+  const values = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+
+  const keys = [
+    { col: idCol, value: facility.id },
+    { col: maCoSoCol, value: facility.maCoSo },
+    { col: accountCol, value: facility.soTaiKhoanPCCC },
+  ];
+
+  for (const key of keys) {
+    const target = String(key.value || "").trim();
+    if (key.col < 0 || !target) continue;
+
+    const index = values.findIndex((row) => String(row[key.col] || "").trim() === target);
+    if (index >= 0) return index + 2;
+  }
+
+  return -1;
 }
 
-function buildRow(syncedAt, facility) {
+function getHeaders(sheet) {
+  return sheet
+    .getRange(1, 1, 1, sheet.getLastColumn())
+    .getValues()[0]
+    .map((value) => String(value || "").trim());
+}
+
+function buildRow(syncedAt, facility, status) {
   return [
-    syncedAt || new Date().toISOString(),
+    facility.id || "",
     facility.maCoSo || "",
     facility.soHoSo || "",
     facility.soTaiKhoanPCCC || "",
@@ -123,6 +170,8 @@ function buildRow(syncedAt, facility) {
     facility.noiDungCanLuuY || "",
     facility.createdAt || "",
     facility.updatedAt || "",
+    status || "active",
+    syncedAt || new Date().toISOString(),
   ];
 }
 
@@ -156,16 +205,10 @@ Dán URL `/exec` vào giữa dấu nháy:
 const GOOGLE_SHEET_ENDPOINT = "https://script.google.com/macros/s/DEPLOYMENT_ID/exec";
 ```
 
-Sau khi cấu hình:
+## 5. Lưu ý khi cập nhật từ script cũ
 
-1. Mở lại app.
-2. Tạo hoặc cập nhật một hồ sơ.
-3. App sẽ lưu local trước, sau đó gửi Google Sheet.
-4. Nếu gửi lỗi, dữ liệu local vẫn được giữ và danh sách sẽ hiển thị badge lỗi đồng bộ.
-
-## 5. Ghi chú
-
-- Frontend dùng `fetch(..., { mode: "no-cors" })`, nên không đọc response từ Apps Script.
-- Nếu request không throw lỗi, app coi là đã gửi.
-- Apps Script vẫn trả JSON để dễ kiểm tra bằng công cụ khác khi cần.
-- Upsert dựa trên `soTaiKhoanPCCC`; nếu trường này trống, script sẽ append dòng mới.
+- Script mới không dùng append mù.
+- Script mới update/delete theo thứ tự ưu tiên: `id`, `maCoSo`, `soTaiKhoanPCCC`.
+- Nếu sheet cũ chưa có cột `id` hoặc header đang theo mẫu cũ, script sẽ chuẩn hóa hàng header về đúng thứ tự mới. Dữ liệu cũ chưa có giá trị `id`, nên lần đồng bộ đầu tiên có thể cần dựa vào `maCoSo` hoặc `soTaiKhoanPCCC`.
+- Nếu sheet cũ có nhiều dòng trùng từ script cũ, nên rà soát/xóa dòng trùng thủ công một lần trước khi dùng lâu dài.
+- Frontend dùng `fetch(..., { mode: "no-cors" })`, nên không đọc response từ Apps Script. Nếu request không throw lỗi, app coi là đã gửi yêu cầu.

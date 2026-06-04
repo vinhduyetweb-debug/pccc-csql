@@ -332,6 +332,20 @@
       </section>
     </main>
 
+    <div id="confirmModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle">
+      <div class="confirm-modal">
+        <div class="modal-icon">✓</div>
+        <h2 id="confirmModalTitle">THÔNG TIN ĐÃ ĐƯỢC GHI NHẬN</h2>
+        <p id="confirmModalMessage" class="modal-message"></p>
+        <div id="confirmModalDetails" class="modal-details"></div>
+        <p class="modal-note">Vui lòng chụp màn hình thông báo này để lưu lại thông tin xác nhận.</p>
+        <div class="modal-actions">
+          <button id="modalCloseBtn" type="button" class="secondary">Đóng</button>
+          <button id="modalNewBtn" type="button">Nhập hồ sơ khác</button>
+        </div>
+      </div>
+    </div>
+
     <script src="app.js"></script>
   </body>
 </html>

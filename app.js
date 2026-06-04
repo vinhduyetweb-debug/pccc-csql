@@ -1,6 +1,6 @@
 const STORAGE_KEY = "pccc-csql.facilities.v1";
 const DEFAULT_CITY = "TP. Hồ Chí Minh";
-const GOOGLE_SHEET_ENDPOINT = "https://script.google.com/macros/s/AKfycbxKWLx1QhPczFzusbW7HlRdB_UebmydWNjtCEu1F8PY71mkOFLHRSlMRo7KGhLG-SAM/exec";
+const GOOGLE_SHEET_ENDPOINT = "https://script.google.com/macros/s/AKfycbx7B_mMhwtAQEf62J8aSwqMgRYFWqOo37s5CRx7sYlRXT4b9GZEoKImUgBYBGI3yHzl/exec";
 const IS_ADMIN_MODE = new URLSearchParams(window.location.search).get("admin") === "1";
 
 const DEFAULT_MANAGEMENT_INFO = {
@@ -164,6 +164,12 @@ const pageTitle = document.querySelector("#pageTitle");
 const headerEyebrow = document.querySelector("#headerEyebrow");
 const adminStatus = document.querySelector("#adminStatus");
 const publicIntro = document.querySelector("#publicIntro");
+const confirmModal = document.querySelector("#confirmModal");
+const confirmModalTitle = document.querySelector("#confirmModalTitle");
+const confirmModalMessage = document.querySelector("#confirmModalMessage");
+const confirmModalDetails = document.querySelector("#confirmModalDetails");
+const modalCloseBtn = document.querySelector("#modalCloseBtn");
+const modalNewBtn = document.querySelector("#modalNewBtn");
 
 let facilities = loadFacilities();
 let editingId = null;
@@ -435,6 +441,38 @@ function clearMessage() {
   messageBox.className = "message hidden";
 }
 
+function formatConfirmationTime(value) {
+  return formatDateTime(value || new Date().toISOString()) || new Date().toLocaleString("vi-VN");
+}
+
+function showConfirmationModal(facility, result) {
+  const isFailed = result.syncStatus === "failed";
+  const isNotConfigured = result.syncStatus === "not_configured";
+
+  confirmModalTitle.textContent = isFailed || isNotConfigured
+    ? "THÔNG TIN ĐÃ ĐƯỢC LƯU TẠM THỜI"
+    : "THÔNG TIN ĐÃ ĐƯỢC GHI NHẬN";
+
+  confirmModalMessage.textContent = isFailed || isNotConfigured
+    ? "Thông tin cơ sở đã được lưu trên thiết bị. Quá trình đồng bộ Google Sheet chưa thành công, vui lòng liên hệ cán bộ quản lý hoặc thử gửi lại sau."
+    : "Thông tin cơ sở đã được ghi nhận thành công trên hệ thống quản lý PCCC.";
+
+  confirmModalDetails.innerHTML = `
+    <div><span>Tên cơ sở</span><strong>${escapeHtml(facility.tenCoSo)}</strong></div>
+    <div><span>Mã cơ sở</span><strong>${escapeHtml(facility.maCoSo)}</strong></div>
+    <div><span>Thời gian ghi nhận</span><strong>${escapeHtml(formatConfirmationTime(result.lastSyncedAt || facility.updatedAt))}</strong></div>
+    <div><span>Cơ quan tiếp nhận</span><strong>${escapeHtml(DEFAULT_MANAGEMENT_INFO.donViQuanLy)}</strong></div>
+    <div><span>Cán bộ quản lý</span><strong>${escapeHtml(DEFAULT_MANAGEMENT_INFO.canBoQuanLy)}</strong></div>
+    <div><span>SĐT liên hệ</span><strong>${escapeHtml(DEFAULT_MANAGEMENT_INFO.sdtCanBoQuanLy)}</strong></div>
+  `;
+
+  confirmModal.classList.remove("hidden");
+}
+
+function closeConfirmationModal() {
+  confirmModal.classList.add("hidden");
+}
+
 function showDuplicate(record) {
   duplicateBox.className = "duplicate";
   duplicateBox.innerHTML = `
@@ -530,14 +568,25 @@ function updateFacilitySyncState(id, syncState) {
   renderFacilities();
 }
 
-function buildGoogleSheetPayload(facility) {
+function buildGoogleSheetPayload(action, facility) {
   return {
-    action: "UPSERT_FACILITY",
+    action,
     appName: "PCCC-CSQL",
     version: "FINAL_LOCAL_PRO",
     syncedAt: new Date().toISOString(),
     facility: { ...facility },
   };
+}
+
+async function postGoogleSheetPayload(action, facility) {
+  await fetch(GOOGLE_SHEET_ENDPOINT, {
+    method: "POST",
+    mode: "no-cors",
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8",
+    },
+    body: JSON.stringify(buildGoogleSheetPayload(action, facility)),
+  });
 }
 
 async function syncFacilityToGoogleSheet(facility) {
@@ -552,14 +601,7 @@ async function syncFacilityToGoogleSheet(facility) {
 
   const syncedAt = new Date().toISOString();
   try {
-    await fetch(GOOGLE_SHEET_ENDPOINT, {
-      method: "POST",
-      mode: "no-cors",
-      headers: {
-        "Content-Type": "text/plain;charset=utf-8",
-      },
-      body: JSON.stringify(buildGoogleSheetPayload(facility)),
-    });
+    await postGoogleSheetPayload("UPSERT_FACILITY", facility);
     return {
       syncStatus: "synced",
       lastSyncedAt: syncedAt,
@@ -573,6 +615,34 @@ async function syncFacilityToGoogleSheet(facility) {
       syncError: error.message || "Không gửi được Google Sheet.",
       message:
         "Thông tin cơ sở đã được lưu trên thiết bị. Quá trình đồng bộ Google Sheet chưa thành công, vui lòng gửi lại sau.",
+    };
+  }
+}
+
+async function deleteFacilityFromGoogleSheet(facility) {
+  if (!GOOGLE_SHEET_ENDPOINT) {
+    return {
+      ok: false,
+      message: "Đã xóa hồ sơ trên thiết bị. Chưa cấu hình đồng bộ Google Sheet.",
+    };
+  }
+
+  try {
+    await postGoogleSheetPayload("DELETE_FACILITY", {
+      id: facility.id,
+      maCoSo: facility.maCoSo,
+      soTaiKhoanPCCC: facility.soTaiKhoanPCCC,
+      tenCoSo: facility.tenCoSo,
+    });
+    return {
+      ok: true,
+      message: "Hồ sơ đã được xóa khỏi thiết bị và đã gửi yêu cầu xóa trên Google Sheet.",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message:
+        "Hồ sơ đã được xóa khỏi thiết bị. Gửi yêu cầu xóa trên Google Sheet chưa thành công, vui lòng kiểm tra lại.",
     };
   }
 }
@@ -670,7 +740,7 @@ function editFacility(id) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-function deleteFacility(id) {
+async function deleteFacility(id) {
   if (!IS_ADMIN_MODE) return;
   const record = facilities.find((item) => item.id === id);
   if (!record) return;
@@ -682,7 +752,8 @@ function deleteFacility(id) {
   saveFacilities();
   renderFacilities();
   if (editingId === id) resetForm();
-  setMessage("Đã xóa hồ sơ.", "success");
+  const result = await deleteFacilityFromGoogleSheet(record);
+  setMessage(result.message, result.ok ? "success" : "error");
 }
 
 function viewFacility(id) {
@@ -827,7 +898,15 @@ async function handleSubmit(event) {
 
   const result = await syncFacilityToGoogleSheet(savedRecord);
   updateFacilitySyncState(savedRecord.id, result);
-  setMessage(result.message, result.syncStatus === "failed" ? "error" : "success");
+  const latestRecord = facilities.find((item) => item.id === savedRecord.id) || savedRecord;
+  if (IS_ADMIN_MODE) {
+    const adminMessage = result.syncStatus === "failed"
+      ? "Hồ sơ đã được lưu trên thiết bị. Quá trình đồng bộ Google Sheet chưa thành công, vui lòng gửi lại sau."
+      : "Hồ sơ đã được cập nhật và đã gửi yêu cầu đồng bộ Google Sheet.";
+    setMessage(adminMessage, result.syncStatus === "failed" ? "error" : "success");
+  } else {
+    showConfirmationModal(latestRecord, result);
+  }
 }
 
 function exportJson() {
@@ -1366,7 +1445,7 @@ async function handleTableClick(event) {
 
   const { action, id } = button.dataset;
   if (action === "edit") editFacility(id);
-  if (action === "delete") deleteFacility(id);
+  if (action === "delete") await deleteFacility(id);
   if (action === "retry-sync") await retryGoogleSheetSync(id);
 }
 
@@ -1403,6 +1482,11 @@ function init() {
   exportCsvBtn.addEventListener("click", exportCsv);
   exportBackupBtn.addEventListener("click", exportBackupJson);
   importInput.addEventListener("change", importJson);
+  modalCloseBtn.addEventListener("click", closeConfirmationModal);
+  modalNewBtn.addEventListener("click", () => {
+    closeConfirmationModal();
+    resetForm();
+  });
   [filterWard, filterSector, filterApproval, filterFlag].forEach((filter) => {
     filter.addEventListener("change", renderFacilities);
   });

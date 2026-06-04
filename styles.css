@@ -455,6 +455,95 @@ button:disabled,
   color: var(--danger);
 }
 
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(17, 38, 60, 0.54);
+}
+
+.confirm-modal {
+  width: min(560px, 100%);
+  border: 1px solid #d8e3ee;
+  border-radius: 16px;
+  background: #fff;
+  padding: 26px;
+  box-shadow: 0 24px 80px rgba(16, 35, 55, 0.28);
+  text-align: center;
+}
+
+.modal-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  margin-bottom: 12px;
+  border-radius: 50%;
+  background: #edfdf6;
+  color: #116149;
+  font-size: 32px;
+  font-weight: 800;
+}
+
+.confirm-modal h2 {
+  margin-bottom: 10px;
+  color: #113657;
+  font-size: 22px;
+}
+
+.modal-message {
+  margin-bottom: 18px;
+  color: #344154;
+  line-height: 1.5;
+}
+
+.modal-details {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0;
+  text-align: left;
+}
+
+.modal-details div {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #e0e8f0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #f8fafc;
+}
+
+.modal-details span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.modal-details strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.modal-note {
+  border-radius: 10px;
+  background: #fff8db;
+  padding: 10px 12px;
+  color: #6f5300;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
 .table-wrap {
   overflow: auto;
   border: 1px solid var(--border);

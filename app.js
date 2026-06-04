@@ -175,6 +175,10 @@ const modalNote = document.querySelector(".modal-note");
 const modalCloseBtn = document.querySelector("#modalCloseBtn");
 const modalSubmitBtn = document.querySelector("#modalSubmitBtn");
 const modalNewBtn = document.querySelector("#modalNewBtn");
+const lookupInput = document.querySelector("#lookupInput");
+const lookupBtn = document.querySelector("#lookupBtn");
+const lookupResult = document.querySelector("#lookupResult");
+const formStatusBadge = document.querySelector("#formStatusBadge");
 let reviewSubmitPending = false;
 
 let facilities = loadFacilities();
@@ -436,10 +440,34 @@ function validateImportedFacility(data, rowNumber, existingRecords = facilities)
     }
   });
 
-  const duplicate = data.soTaiKhoanPCCC
-    ? existingRecords.find((record) => record.soTaiKhoanPCCC === data.soTaiKhoanPCCC)
-    : null;
+  const duplicate = findImportDuplicate(data, existingRecords).record;
   return { errors: [...new Set(errors)], duplicate };
+}
+
+function findImportDuplicate(data, existingRecords = facilities) {
+  const keyChecks = [
+    ["id", data.id],
+    ["maCoSo", data.maCoSo],
+    ["soTaiKhoanPCCC", data.soTaiKhoanPCCC],
+  ];
+
+  for (const [field, value] of keyChecks) {
+    const normalized = normalizeText(value);
+    if (!normalized) continue;
+    const record = existingRecords.find((item) => normalizeText(item[field]) === normalized);
+    if (record) return { record, matchType: field, multiple: false };
+  }
+
+  const phoneValues = [data.sdtNguoiDungDau, data.sdtNguoiThuongTruc].filter(Boolean);
+  for (const phone of phoneValues) {
+    const matches = existingRecords.filter(
+      (item) => item.sdtNguoiDungDau === phone || item.sdtNguoiThuongTruc === phone || item.sdtCanBoQuanLy === phone,
+    );
+    if (matches.length === 1) return { record: matches[0], matchType: "phone", multiple: false };
+    if (matches.length > 1) return { record: null, matchType: "phone", multiple: true };
+  }
+
+  return { record: null, matchType: "", multiple: false };
 }
 
 function setMessage(text, type = "success") {
@@ -769,9 +797,12 @@ function resetForm() {
   formTitle.textContent = IS_ADMIN_MODE ? "Thêm hồ sơ cơ sở" : "Biểu mẫu tiếp nhận thông tin cơ sở";
   formModeText.textContent = "Mã cơ sở sẽ được tự sinh khi lưu.";
   submitBtn.textContent = IS_ADMIN_MODE ? "Lưu hồ sơ" : "Gửi thông tin cơ sở";
+  formStatusBadge.textContent = "Kê khai mới";
+  formStatusBadge.className = "form-status-badge";
   cancelEditBtn.classList.add("hidden");
   clearMessage();
   hideDuplicate();
+  clearLookupResult();
 }
 
 function editFacility(id) {
@@ -793,8 +824,10 @@ function editFacility(id) {
 
   document.querySelector("#maCoSo").value = record.maCoSo;
   formTitle.textContent = "Cập nhật hồ sơ cơ sở";
-  formModeText.textContent = `Đang cập nhật ${record.maCoSo}. Giữ nguyên ngày tạo ban đầu.`;
-  submitBtn.textContent = "Cập nhật hồ sơ";
+  formModeText.textContent = `Mã cơ sở: ${record.maCoSo}. Giữ nguyên ngày tạo ban đầu.`;
+  submitBtn.textContent = IS_ADMIN_MODE ? "Cập nhật hồ sơ" : "Gửi thông tin cập nhật";
+  formStatusBadge.textContent = "Cập nhật hồ sơ đã có";
+  formStatusBadge.className = "form-status-badge updating";
   cancelEditBtn.classList.remove("hidden");
   clearMessage();
   hideDuplicate();
@@ -823,6 +856,129 @@ function viewFacility(id) {
     row.scrollIntoView({ behavior: "smooth", block: "center" });
     row.classList.add("highlight");
     setTimeout(() => row.classList.remove("highlight"), 1400);
+  }
+}
+
+function clearLookupResult() {
+  if (!lookupResult) return;
+  lookupResult.className = "lookup-result hidden";
+  lookupResult.innerHTML = "";
+}
+
+function hasMeaningfulFormData() {
+  const data = getFormData();
+  return [
+    data.soHoSo,
+    data.soTaiKhoanPCCC,
+    data.tenCoSo,
+    data.diaChi,
+    data.nguoiDungDau,
+    data.sdtNguoiDungDau,
+    data.nguoiThuongTruc,
+    data.sdtNguoiThuongTruc,
+    data.noiDungCanLuuY,
+  ].some((value) => normalizeText(value));
+}
+
+function getLookupSummary(record) {
+  return `
+    <div class="lookup-summary">
+      <strong>${escapeHtml(record.tenCoSo)}</strong>
+      <span>Mã cơ sở: ${escapeHtml(record.maCoSo || "")}</span>
+      <span>Phường/Xã: ${escapeHtml(record.phuongXa || "")}</span>
+      <span>Địa chỉ: ${escapeHtml(record.diaChi || "")}</span>
+      ${record.soTaiKhoanPCCC ? `<span>Số tài khoản PCCC: ${escapeHtml(record.soTaiKhoanPCCC)}</span>` : ""}
+    </div>
+  `;
+}
+
+function renderLookupResults(records) {
+  if (!records.length) {
+    lookupResult.className = "lookup-result info";
+    lookupResult.innerHTML = "Chưa tìm thấy hồ sơ phù hợp. Vui lòng tiếp tục kê khai thông tin mới.";
+    return;
+  }
+
+  if (records.length === 1) {
+    const record = records[0];
+    lookupResult.className = "lookup-result";
+    lookupResult.innerHTML = `
+      <h3>Đã tìm thấy hồ sơ trong hệ thống.</h3>
+      ${getLookupSummary(record)}
+      <div class="lookup-actions">
+        <button type="button" data-lookup-load="${record.id}">Tải hồ sơ để cập nhật</button>
+        <button type="button" class="secondary" data-lookup-new="1">Tiếp tục kê khai mới</button>
+      </div>
+    `;
+    return;
+  }
+
+  lookupResult.className = "lookup-result";
+  lookupResult.innerHTML = `
+    <h3>Tìm thấy nhiều hồ sơ phù hợp.</h3>
+    <div class="lookup-list">
+      ${records
+        .map(
+          (record) => `
+            <div class="lookup-item">
+              ${getLookupSummary(record)}
+              <button type="button" data-lookup-load="${record.id}">Tải hồ sơ này</button>
+            </div>
+          `,
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function searchPublicRecords(query) {
+  const digits = normalizeDigits(query);
+  if (![10, 13].includes(digits.length)) {
+    lookupResult.className = "lookup-result error";
+    lookupResult.innerHTML = "Vui lòng nhập Số tài khoản PCCC gồm 13 chữ số hoặc Số điện thoại gồm 10 chữ số.";
+    return;
+  }
+
+  if (digits.length === 13) {
+    renderLookupResults(facilities.filter((record) => record.soTaiKhoanPCCC === digits));
+    return;
+  }
+
+  const primaryMatches = facilities.filter(
+    (record) => record.sdtNguoiDungDau === digits || record.sdtNguoiThuongTruc === digits,
+  );
+  if (primaryMatches.length) {
+    renderLookupResults(primaryMatches);
+    return;
+  }
+
+  renderLookupResults(facilities.filter((record) => record.sdtCanBoQuanLy === digits));
+}
+
+function loadLookupRecord(id) {
+  const record = facilities.find((item) => item.id === id);
+  if (!record) return;
+
+  if (!editingId && hasMeaningfulFormData()) {
+    const confirmed = confirm(
+      "Hệ thống sẽ tải hồ sơ đã có và thay thế nội dung đang nhập trên biểu mẫu. Bạn có muốn tiếp tục không?",
+    );
+    if (!confirmed) return;
+  }
+
+  editFacility(id);
+  clearLookupResult();
+}
+
+function handleLookupResultClick(event) {
+  const loadButton = event.target.closest("[data-lookup-load]");
+  if (loadButton) {
+    loadLookupRecord(loadButton.dataset.lookupLoad);
+    return;
+  }
+
+  if (event.target.closest("[data-lookup-new]")) {
+    clearLookupResult();
   }
 }
 
@@ -1124,6 +1280,20 @@ function normalizeSectorCode(codeValue, nameValue) {
   const rawCode = normalizeText(codeValue).toUpperCase();
   if (SECTOR_OPTIONS.some(([code]) => code === rawCode)) return rawCode;
 
+  const numericMap = {
+    1: "I",
+    2: "II",
+    3: "III",
+    4: "IV",
+    5: "V",
+    6: "VI",
+    7: "VII",
+    8: "VIII",
+    9: "IX",
+    10: "X",
+  };
+  if (numericMap[rawCode]) return numericMap[rawCode];
+
   const combined = normalizeText(`${codeValue} ${nameValue}`).toUpperCase();
   const romanMatch = /\b(I|II|III|IV|V|VI|VII|VIII|IX|X)\b/.exec(combined);
   if (romanMatch && SECTOR_OPTIONS.some(([code]) => code === romanMatch[1])) {
@@ -1178,12 +1348,13 @@ async function parseExcelFile(file) {
 
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
-  const firstSheetName = workbook.SheetNames[0];
-  if (!firstSheetName) {
+  const preferredSheetName = workbook.SheetNames.find((name) => normalizeHeader(name) === normalizeHeader("ds.vinh 05.2026"));
+  const sheetName = preferredSheetName || workbook.SheetNames[0];
+  if (!sheetName) {
     throw new Error("File Excel không có sheet dữ liệu.");
   }
 
-  const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheetName], {
+  const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
     header: 1,
     defval: "",
     raw: false,
@@ -1257,8 +1428,11 @@ function buildImportPreview(mappedRows, shouldUpdateDuplicates) {
   mappedRows.forEach((item) => {
     const validation = validateImportedFacility(item.data, item.rowNumber);
     const rowErrors = [...validation.errors];
+    const duplicateInfo = findImportDuplicate(item.data);
+    let duplicateInFile = false;
 
     if (item.data.soTaiKhoanPCCC && seenAccounts.has(item.data.soTaiKhoanPCCC)) {
+      duplicateInFile = true;
       rowErrors.push(`Dòng ${item.rowNumber}: Số tài khoản PCCC trùng trong file import`);
     }
     if (item.data.soTaiKhoanPCCC) {
@@ -1267,13 +1441,22 @@ function buildImportPreview(mappedRows, shouldUpdateDuplicates) {
 
     const previewItem = {
       ...item,
-      duplicate: validation.duplicate,
+      duplicate: duplicateInfo.record || validation.duplicate,
       errors: rowErrors,
-      mode: validation.duplicate ? "update" : "create",
+      mode: duplicateInfo.record || validation.duplicate ? "update" : "create",
+      duplicateMatchType: duplicateInfo.matchType,
+      duplicateMultiple: duplicateInfo.multiple,
+      duplicateInFile,
     };
 
-    if (validation.duplicate) {
+    if (duplicateInfo.record || validation.duplicate || duplicateInfo.multiple || duplicateInFile) {
       duplicateRows.push(previewItem);
+    }
+    if (duplicateInfo.multiple) {
+      rowErrors.push(`Dòng ${item.rowNumber}: SĐT trùng nhiều hồ sơ, cần rà soát thủ công`);
+      errors.push(...rowErrors);
+      errorRows.push({ ...previewItem, errors: rowErrors });
+      return;
     }
     if (rowErrors.length) {
       errors.push(...rowErrors);
@@ -1539,6 +1722,14 @@ function init() {
   resetBtn.addEventListener("click", resetForm);
   reviewBtn.addEventListener("click", showReviewModal);
   cancelEditBtn.addEventListener("click", resetForm);
+  lookupBtn.addEventListener("click", () => searchPublicRecords(lookupInput.value));
+  lookupInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      searchPublicRecords(lookupInput.value);
+    }
+  });
+  lookupResult.addEventListener("click", handleLookupResultClick);
   exportBtn.addEventListener("click", exportJson);
   exportCsvBtn.addEventListener("click", exportCsv);
   exportBackupBtn.addEventListener("click", exportBackupJson);

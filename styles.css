@@ -654,6 +654,112 @@ tr:last-child td {
   font-weight: 700;
 }
 
+.lookup-card {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 18px;
+  border: 1px solid #cfe1ef;
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 18px;
+  box-shadow: 0 10px 26px rgba(20, 45, 75, 0.06);
+}
+
+.lookup-card h2 {
+  margin-bottom: 6px;
+  color: var(--navy);
+}
+
+.lookup-card p {
+  margin-bottom: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.lookup-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.lookup-result {
+  border: 1px solid #d5dde7;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 14px;
+}
+
+.lookup-result.info {
+  border-color: #cfe1ef;
+  background: #f3f9ff;
+  color: #24435f;
+  font-weight: 700;
+}
+
+.lookup-result.error {
+  border-color: #ffb4ad;
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.lookup-result h3 {
+  margin: 0 0 10px;
+  color: var(--navy);
+  font-size: 16px;
+}
+
+.lookup-summary {
+  display: grid;
+  gap: 4px;
+  color: #344154;
+  line-height: 1.4;
+}
+
+.lookup-summary strong {
+  color: var(--text);
+}
+
+.lookup-actions,
+.lookup-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.lookup-actions {
+  grid-template-columns: repeat(2, max-content);
+}
+
+.lookup-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  padding: 12px;
+}
+
+.form-status-badge {
+  display: inline-block;
+  margin-top: 8px;
+  border: 1px solid #9dddc5;
+  border-radius: 999px;
+  background: #edfdf6;
+  color: #116149;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.form-status-badge.updating {
+  border-color: #cfe1ef;
+  background: #f3f9ff;
+  color: #24435f;
+}
+
 .public-footer {
   margin-top: 18px;
   font-size: 13px;
@@ -661,7 +767,8 @@ tr:last-child td {
 }
 
 .admin-mode .intro-card,
-.admin-mode .public-footer {
+.admin-mode .public-footer,
+.admin-mode .public-only {
   display: none;
 }
 
@@ -701,6 +808,9 @@ tr:last-child td {
   .filters,
   .dashboard,
   .modal-details,
+  .lookup-controls,
+  .lookup-actions,
+  .lookup-item,
   .preview-summary {
     grid-template-columns: 1fr;
   }

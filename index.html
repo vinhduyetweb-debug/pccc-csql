@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PCCC-CSQL</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Quản lý cơ sở PCCC cấp phường/xã</p>
+        <h1>PCCC-CSQL</h1>
+      </div>
+      <div class="header-actions">
+        <button id="exportCsvBtn" class="secondary" type="button">Export CSV</button>
+        <button id="exportBackupBtn" class="secondary" type="button">Export Backup JSON</button>
+        <button id="exportBtn" class="secondary" type="button">Xuất JSON</button>
+        <label class="secondary file-button">
+          Nhập JSON
+          <input id="importInput" type="file" accept="application/json,.json" />
+        </label>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="form-panel" aria-labelledby="formTitle">
+        <div class="panel-title">
+          <div>
+            <h2 id="formTitle">Thêm hồ sơ cơ sở</h2>
+            <p id="formModeText">Mã cơ sở sẽ được tự sinh khi lưu.</p>
+          </div>
+          <button id="resetBtn" class="ghost" type="button">Làm mới</button>
+        </div>
+
+        <div id="messageBox" class="message hidden" role="status"></div>
+        <div id="duplicateBox" class="duplicate hidden"></div>
+
+        <form id="facilityForm" novalidate>
+          <fieldset>
+            <legend>Thông tin định danh</legend>
+            <div class="grid">
+              <label>
+                Mã cơ sở
+                <input id="maCoSo" name="maCoSo" type="text" readonly placeholder="Tự sinh" />
+              </label>
+              <label>
+                Số hồ sơ
+                <input name="soHoSo" type="text" />
+              </label>
+              <label>
+                Số tài khoản CSDL Quốc gia PCCC
+                <input name="soTaiKhoanPCCC" inputmode="numeric" autocomplete="off" />
+              </label>
+              <label>
+                Tên cơ sở <span class="required">*</span>
+                <input name="tenCoSo" type="text" />
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Địa chỉ</legend>
+            <div class="grid">
+              <label class="wide">
+                Địa chỉ <span class="required">*</span>
+                <input name="diaChi" type="text" />
+              </label>
+              <label>
+                Phường/Xã
+                <select name="phuongXa" id="phuongXa"></select>
+              </label>
+              <label>
+                Thành phố
+                <input name="thanhPho" type="text" value="TP. Hồ Chí Minh" readonly />
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Phân loại và hoạt động</legend>
+            <div class="grid">
+              <label class="wide">
+                Lĩnh vực
+                <select name="linhVucCode" id="linhVucCode"></select>
+              </label>
+              <label>
+                Tính chất hoạt động
+                <select name="tinhChatHoatDong" id="tinhChatHoatDong"></select>
+              </label>
+              <label>
+                Tháng năm hoạt động
+                <input name="thangNamHoatDong" type="month" />
+              </label>
+              <label>
+                Nhóm quản lý
+                <select name="nhomQuanLy" id="nhomQuanLy"></select>
+              </label>
+              <label>
+                Tình trạng thẩm duyệt/nghiệm thu
+                <select name="tinhTrangThamDuyetNghiemThu" id="tinhTrangThamDuyetNghiemThu"></select>
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Quy mô công trình</legend>
+            <div class="grid">
+              <label>
+                Số tầng
+                <input name="soTang" type="number" min="0" step="1" />
+              </label>
+              <label>
+                Khối tích (m³)
+                <input name="khoiTich" type="number" min="0" step="0.01" />
+              </label>
+              <label>
+                Tổng diện tích sàn (m²)
+                <input name="tongDienTichSan" type="number" min="0" step="0.01" />
+              </label>
+              <label class="wide">
+                Thông tin đặc thù
+                <textarea name="thongTinDacThu" rows="3"></textarea>
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Vi phạm / đình chỉ</legend>
+            <div class="checks">
+              <label><input name="viPhamXayDung" type="checkbox" /> Vi phạm xây dựng</label>
+              <label><input name="viPhamDangKyKinhDoanh" type="checkbox" /> Vi phạm đăng ký kinh doanh</label>
+              <label><input name="viPhamPCCC" type="checkbox" /> Vi phạm PCCC</label>
+            </div>
+            <div class="grid">
+              <label>
+                Số quyết định đình chỉ
+                <input name="soQuyetDinhDinhChi" type="text" />
+              </label>
+              <label>
+                Ngày quyết định đình chỉ
+                <input name="ngayQuyetDinhDinhChi" type="date" />
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Liên hệ và quản lý</legend>
+            <div class="grid">
+              <label>
+                Người đứng đầu
+                <input name="nguoiDungDau" type="text" />
+              </label>
+              <label>
+                SĐT người đứng đầu
+                <input name="sdtNguoiDungDau" inputmode="numeric" autocomplete="off" />
+              </label>
+              <label>
+                Người thường trực
+                <input name="nguoiThuongTruc" type="text" />
+              </label>
+              <label>
+                SĐT người thường trực
+                <input name="sdtNguoiThuongTruc" inputmode="numeric" autocomplete="off" />
+              </label>
+              <label>
+                Đơn vị quản lý
+                <input name="donViQuanLy" type="text" />
+              </label>
+              <label>
+                Cán bộ quản lý
+                <input name="canBoQuanLy" type="text" />
+              </label>
+              <label>
+                SĐT cán bộ quản lý
+                <input name="sdtCanBoQuanLy" inputmode="numeric" autocomplete="off" />
+              </label>
+              <label class="wide">
+                Nội dung cần lưu ý
+                <textarea name="noiDungCanLuuY" rows="3"></textarea>
+              </label>
+            </div>
+          </fieldset>
+
+          <div class="form-actions">
+            <button id="submitBtn" type="submit">Lưu hồ sơ</button>
+            <button id="cancelEditBtn" class="secondary hidden" type="button">Hủy cập nhật</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="list-panel" aria-labelledby="listTitle">
+        <div class="panel-title">
+          <div>
+            <h2 id="listTitle">Danh sách cơ sở</h2>
+            <p><span id="recordCount">0</span> hồ sơ đang lưu local.</p>
+          </div>
+        </div>
+
+        <div class="excel-import" aria-label="Import Excel">
+          <div class="panel-title">
+            <div>
+              <h3>Import Excel</h3>
+              <p>Đọc sheet đầu tiên từ file .xlsx theo mẫu DANH SACH NHAP LIEU.xlsx.</p>
+            </div>
+          </div>
+          <div class="import-controls">
+            <label class="secondary file-button">
+              Import Excel
+              <input id="excelInput" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+            </label>
+            <button id="previewExcelBtn" class="secondary" type="button" disabled>Xem trước</button>
+            <label class="inline-check">
+              <input id="updateDuplicatesInput" type="checkbox" />
+              Cập nhật hồ sơ trùng
+            </label>
+            <button id="confirmExcelImportBtn" type="button" class="hidden" disabled>Xác nhận Import</button>
+            <button id="cancelExcelImportBtn" class="secondary hidden" type="button">Hủy</button>
+          </div>
+          <div id="excelPreview" class="excel-preview hidden"></div>
+        </div>
+
+        <div class="dashboard" aria-label="Dashboard thống kê">
+          <div class="stat-card total">
+            <span class="stat-label">Tổng số cơ sở</span>
+            <strong id="statTotal">0</strong>
+          </div>
+          <div class="stat-group">
+            <h3>Theo phường/xã</h3>
+            <div id="wardStats" class="stat-grid"></div>
+          </div>
+          <div class="stat-group">
+            <h3>Theo lĩnh vực</h3>
+            <div id="sectorStats" class="sector-grid"></div>
+          </div>
+          <div class="stat-group">
+            <h3>Theo tình trạng hoạt động</h3>
+            <div id="activityStats" class="stat-grid"></div>
+          </div>
+          <div class="stat-group">
+            <h3>Theo thẩm duyệt/nghiệm thu</h3>
+            <div id="approvalStats" class="stat-grid"></div>
+          </div>
+          <div class="stat-grid">
+            <div class="stat-card warning">
+              <span class="stat-label">Thiếu dữ liệu</span>
+              <strong id="statMissing">0</strong>
+            </div>
+            <div class="stat-card warning">
+              <span class="stat-label">Có vi phạm PCCC</span>
+              <strong id="statViolation">0</strong>
+            </div>
+            <div class="stat-card warning">
+              <span class="stat-label">Bị đình chỉ</span>
+              <strong id="statSuspended">0</strong>
+            </div>
+          </div>
+        </div>
+
+        <label class="search">
+          Tìm kiếm
+          <input
+            id="searchInput"
+            type="search"
+            placeholder="Tên cơ sở, địa chỉ, số tài khoản PCCC, số điện thoại"
+          />
+        </label>
+
+        <div class="filters" aria-label="Bộ lọc danh sách">
+          <label>
+            Phường
+            <select id="filterWard"></select>
+          </label>
+          <label>
+            Lĩnh vực
+            <select id="filterSector"></select>
+          </label>
+          <label>
+            Tình trạng thẩm duyệt
+            <select id="filterApproval"></select>
+          </label>
+          <label>
+            Cảnh báo
+            <select id="filterFlag">
+              <option value="">Tất cả</option>
+              <option value="viPhamPCCC">Có vi phạm PCCC</option>
+              <option value="missing">Thiếu dữ liệu</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Mã</th>
+                <th>Số TK PCCC</th>
+                <th>Tên cơ sở</th>
+                <th>Địa chỉ</th>
+                <th>Phường</th>
+                <th>Lĩnh vực</th>
+                <th>Người đứng đầu</th>
+                <th>SĐT</th>
+                <th>Thao tác</th>
+              </tr>
+            </thead>
+            <tbody id="facilityTable"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

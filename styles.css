@@ -401,6 +401,35 @@ button:disabled,
   font-weight: 700;
 }
 
+.sync-badge {
+  display: inline-block;
+  margin-top: 7px;
+  margin-left: 4px;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sync-badge.synced {
+  border: 1px solid #9dddc5;
+  background: #edfdf6;
+  color: #116149;
+}
+
+.sync-badge.not-configured,
+.sync-badge.pending {
+  border: 1px solid var(--warn-border);
+  background: var(--warn-bg);
+  color: #6f5300;
+}
+
+.sync-badge.failed {
+  border: 1px solid #ffb4ad;
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
 .table-wrap {
   overflow: auto;
   border: 1px solid var(--border);

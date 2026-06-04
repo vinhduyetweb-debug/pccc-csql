@@ -1,5 +1,12 @@
 const STORAGE_KEY = "pccc-csql.facilities.v1";
 const DEFAULT_CITY = "TP. Hồ Chí Minh";
+const GOOGLE_SHEET_ENDPOINT = "https://script.google.com/macros/s/AKfycbxKWLx1QhPczFzusbW7HlRdB_UebmydWNjtCEu1F8PY71mkOFLHRSlMRo7KGhLG-SAM/exec";
+
+const DEFAULT_MANAGEMENT_INFO = {
+  donViQuanLy: "Đội CC&CNCH Khu vực 8 - Phòng Cảnh sát PCCC và CNCH CATP.HCM",
+  canBoQuanLy: "Đại úy Nguyễn Quang Vinh",
+  sdtCanBoQuanLy: "0899960333",
+};
 
 const WARDS = ["Phú Định", "Hưng Phú", "Bình Đông"];
 
@@ -63,6 +70,7 @@ const APPROVAL_STATUS_OPTIONS = [
   "Đã thẩm duyệt, nghiệm thu",
   "Đã thẩm duyệt, chưa nghiệm thu",
   "Chưa được thẩm duyệt, nghiệm thu",
+  "Không thuộc diện thẩm định thiết kế PCCC",
 ];
 
 const EXCEL_COLUMN_ALIASES = {
@@ -188,7 +196,7 @@ function loadFacilities() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? parsed.map(withSyncDefaults) : [];
   } catch {
     return [];
   }
@@ -196,6 +204,23 @@ function loadFacilities() {
 
 function saveFacilities() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(facilities));
+}
+
+function withSyncDefaults(record) {
+  return {
+    ...record,
+    syncStatus: record.syncStatus || "not_configured",
+    lastSyncedAt: record.lastSyncedAt || "",
+    syncError: record.syncError || "",
+  };
+}
+
+function applyManagementDefaults() {
+  Object.entries(DEFAULT_MANAGEMENT_INFO).forEach(([field, value]) => {
+    if (form.elements[field] && !normalizeText(form.elements[field].value)) {
+      form.elements[field].value = value;
+    }
+  });
 }
 
 function normalizeText(value) {
@@ -447,6 +472,88 @@ function isSuspended(record) {
   return Boolean(record.soQuyetDinhDinhChi || record.ngayQuyetDinhDinhChi);
 }
 
+function getInitialSyncState() {
+  return GOOGLE_SHEET_ENDPOINT
+    ? { syncStatus: "pending", lastSyncedAt: "", syncError: "" }
+    : { syncStatus: "not_configured", lastSyncedAt: "", syncError: "" };
+}
+
+function getSyncLabel(record) {
+  const status = record.syncStatus || "not_configured";
+  if (status === "synced") return "Đã đồng bộ";
+  if (status === "failed") return "Lỗi đồng bộ";
+  if (status === "pending") return "Đang chờ đồng bộ";
+  return "Chưa cấu hình Sheet";
+}
+
+function getSyncBadgeClass(record) {
+  const status = record.syncStatus || "not_configured";
+  if (status === "synced") return "sync-badge synced";
+  if (status === "failed") return "sync-badge failed";
+  if (status === "pending") return "sync-badge pending";
+  return "sync-badge not-configured";
+}
+
+function canRetrySync(record) {
+  return Boolean(GOOGLE_SHEET_ENDPOINT) && ["failed", "not_configured", "pending"].includes(record.syncStatus);
+}
+
+function updateFacilitySyncState(id, syncState) {
+  facilities = facilities.map((record) => (record.id === id ? { ...record, ...syncState } : record));
+  saveFacilities();
+  renderFacilities();
+}
+
+function buildGoogleSheetPayload(facility) {
+  return {
+    action: "UPSERT_FACILITY",
+    appName: "PCCC-CSQL",
+    version: "FINAL_LOCAL_PRO",
+    syncedAt: new Date().toISOString(),
+    facility: { ...facility },
+  };
+}
+
+async function syncFacilityToGoogleSheet(facility) {
+  if (!GOOGLE_SHEET_ENDPOINT) {
+    return {
+      syncStatus: "not_configured",
+      lastSyncedAt: facility.lastSyncedAt || "",
+      syncError: "",
+      message: "Đã lưu local. Chưa cấu hình Google Sheet.",
+    };
+  }
+
+  const syncedAt = new Date().toISOString();
+  try {
+    await fetch(GOOGLE_SHEET_ENDPOINT, {
+      method: "POST",
+      mode: "no-cors",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8",
+      },
+      body: JSON.stringify(buildGoogleSheetPayload(facility)),
+    });
+    return {
+      syncStatus: "synced",
+      lastSyncedAt: syncedAt,
+      syncError: "",
+      message: "Đã lưu local và đã gửi Google Sheet.",
+    };
+  } catch (error) {
+    return {
+      syncStatus: "failed",
+      lastSyncedAt: facility.lastSyncedAt || "",
+      syncError: error.message || "Không gửi được Google Sheet.",
+      message: "Đã lưu local. Gửi Google Sheet lỗi, dữ liệu local vẫn được giữ.",
+    };
+  }
+}
+
+function renderSyncBadge(record) {
+  return `<span class="${getSyncBadgeClass(record)}">${escapeHtml(getSyncLabel(record))}</span>`;
+}
+
 function renderDashboard() {
   statTotal.textContent = facilities.length;
   statMissing.textContent = facilities.filter(hasMissingRequiredListData).length;
@@ -497,6 +604,7 @@ function renderDashboard() {
 function resetForm() {
   form.reset();
   form.elements.thanhPho.value = DEFAULT_CITY;
+  applyManagementDefaults();
   document.querySelector("#maCoSo").value = "";
   editingId = null;
   formTitle.textContent = "Thêm hồ sơ cơ sở";
@@ -517,6 +625,8 @@ function editFacility(id) {
     if (!input) return;
     if (CHECKBOX_FIELDS.includes(field)) {
       input.checked = Boolean(record[field]);
+    } else if (field in DEFAULT_MANAGEMENT_INFO) {
+      input.value = record[field] || DEFAULT_MANAGEMENT_INFO[field];
     } else {
       input.value = record[field] ?? "";
     }
@@ -599,6 +709,9 @@ function renderFacilities() {
   filtered.forEach((record) => {
     const phone = record.sdtNguoiDungDau || record.sdtNguoiThuongTruc || record.sdtCanBoQuanLy || "";
     const missingBadge = hasMissingRequiredListData(record) ? `<span class="missing-badge">⚠ Thiếu dữ liệu</span>` : "";
+    const retryButton = canRetrySync(record)
+      ? `<button type="button" data-action="retry-sync" data-id="${record.id}" class="secondary">Gửi lại Sheet</button>`
+      : "";
     const row = document.createElement("tr");
     row.dataset.rowId = record.id;
     row.innerHTML = `
@@ -607,6 +720,7 @@ function renderFacilities() {
       <td>
         <strong>${escapeHtml(record.tenCoSo)}</strong><br />
         ${missingBadge}
+        ${renderSyncBadge(record)}
       </td>
       <td>${escapeHtml(record.diaChi)}</td>
       <td>${escapeHtml(record.phuongXa)}</td>
@@ -616,6 +730,7 @@ function renderFacilities() {
       <td>
         <div class="row-actions">
           <button type="button" data-action="edit" data-id="${record.id}">Sửa</button>
+          ${retryButton}
           <button type="button" data-action="delete" data-id="${record.id}" class="danger">Xóa</button>
         </div>
       </td>
@@ -624,7 +739,7 @@ function renderFacilities() {
   });
 }
 
-function handleSubmit(event) {
+async function handleSubmit(event) {
   event.preventDefault();
   clearMessage();
   hideDuplicate();
@@ -644,6 +759,9 @@ function handleSubmit(event) {
   }
 
   const now = new Date().toISOString();
+  let savedRecord = null;
+  const syncState = getInitialSyncState();
+
   if (isEditing) {
     facilities = facilities.map((item) =>
       item.id === editingId
@@ -652,25 +770,30 @@ function handleSubmit(event) {
             ...data,
             createdAt: item.createdAt,
             updatedAt: now,
+            ...syncState,
           }
         : item,
     );
-    setMessage("Đã cập nhật hồ sơ.", "success");
+    savedRecord = facilities.find((item) => item.id === editingId);
   } else {
-    facilities.push({
+    savedRecord = {
       id: createId(),
       maCoSo: getNextFacilityCode(),
       ...data,
       createdAt: now,
       updatedAt: now,
-    });
-    setMessage("Đã lưu hồ sơ mới.", "success");
+      ...syncState,
+    };
+    facilities.push(savedRecord);
   }
 
   saveFacilities();
   renderFacilities();
   resetForm();
-  setMessage(isEditing ? "Đã cập nhật hồ sơ." : "Đã lưu hồ sơ mới.", "success");
+
+  const result = await syncFacilityToGoogleSheet(savedRecord);
+  updateFacilitySyncState(savedRecord.id, result);
+  setMessage(result.message, result.syncStatus === "failed" ? "error" : "success");
 }
 
 function exportJson() {
@@ -737,9 +860,12 @@ function exportCsv() {
     "SĐT người đứng đầu",
     "Người thường trực",
     "SĐT thường trực",
-    "Đơn vị quản lý",
+    "Cơ quan quản lý nhà nước về PCCC",
     "Cán bộ quản lý",
     "SĐT cán bộ quản lý",
+    "Trạng thái đồng bộ",
+    "Lần đồng bộ cuối",
+    "Lỗi đồng bộ",
     "Ngày tạo",
     "Ngày cập nhật",
   ];
@@ -773,6 +899,9 @@ function exportCsv() {
     record.donViQuanLy,
     record.canBoQuanLy,
     record.sdtCanBoQuanLy,
+    record.syncStatus,
+    record.lastSyncedAt,
+    record.syncError,
     formatDateTime(record.createdAt),
     formatDateTime(record.updatedAt),
   ]);
@@ -1072,13 +1201,13 @@ function confirmImport() {
       return;
     }
 
-    nextFacilities.push({
+    nextFacilities.push(withSyncDefaults({
       id: createId(),
       maCoSo: getNextFacilityCodeFrom(nextFacilities),
       ...item.data,
       createdAt: now,
       updatedAt: now,
-    });
+    }));
     created += 1;
   });
 
@@ -1138,13 +1267,13 @@ async function importJson(event) {
         return;
       }
 
-      facilities.push({
+      facilities.push(withSyncDefaults({
         id: createId(),
         maCoSo: getNextFacilityCode(),
         ...data,
         createdAt: record.createdAt || now,
         updatedAt: now,
-      });
+      }));
       imported += 1;
     });
 
@@ -1182,13 +1311,29 @@ async function handlePreviewExcel() {
   }
 }
 
-function handleTableClick(event) {
+async function retryGoogleSheetSync(id) {
+  const record = facilities.find((item) => item.id === id);
+  if (!record) return;
+
+  const pendingRecord = { ...record, syncStatus: GOOGLE_SHEET_ENDPOINT ? "pending" : "not_configured", syncError: "" };
+  updateFacilitySyncState(id, {
+    syncStatus: pendingRecord.syncStatus,
+    syncError: "",
+  });
+
+  const result = await syncFacilityToGoogleSheet(pendingRecord);
+  updateFacilitySyncState(id, result);
+  setMessage(result.message, result.syncStatus === "failed" ? "error" : "success");
+}
+
+async function handleTableClick(event) {
   const button = event.target.closest("button");
   if (!button) return;
 
   const { action, id } = button.dataset;
   if (action === "edit") editFacility(id);
   if (action === "delete") deleteFacility(id);
+  if (action === "retry-sync") await retryGoogleSheetSync(id);
 }
 
 function handleDuplicateClick(event) {
@@ -1211,6 +1356,7 @@ function init() {
   fillFilterSelect(filterSector, SECTOR_OPTIONS, "Tất cả");
   fillFilterSelect(filterApproval, APPROVAL_STATUS_OPTIONS, "Tất cả");
   form.elements.thanhPho.value = DEFAULT_CITY;
+  applyManagementDefaults();
 
   form.addEventListener("submit", handleSubmit);
   tableBody.addEventListener("click", handleTableClick);

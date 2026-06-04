@@ -1,6 +1,7 @@
 const STORAGE_KEY = "pccc-csql.facilities.v1";
 const DEFAULT_CITY = "TP. Hồ Chí Minh";
 const GOOGLE_SHEET_ENDPOINT = "https://script.google.com/macros/s/AKfycbxKWLx1QhPczFzusbW7HlRdB_UebmydWNjtCEu1F8PY71mkOFLHRSlMRo7KGhLG-SAM/exec";
+const IS_ADMIN_MODE = new URLSearchParams(window.location.search).get("admin") === "1";
 
 const DEFAULT_MANAGEMENT_INFO = {
   donViQuanLy: "Đội CC&CNCH Khu vực 8 - Phòng Cảnh sát PCCC và CNCH CATP.HCM",
@@ -159,6 +160,10 @@ const filterWard = document.querySelector("#filterWard");
 const filterSector = document.querySelector("#filterSector");
 const filterApproval = document.querySelector("#filterApproval");
 const filterFlag = document.querySelector("#filterFlag");
+const pageTitle = document.querySelector("#pageTitle");
+const headerEyebrow = document.querySelector("#headerEyebrow");
+const adminStatus = document.querySelector("#adminStatus");
+const publicIntro = document.querySelector("#publicIntro");
 
 let facilities = loadFacilities();
 let editingId = null;
@@ -221,6 +226,27 @@ function applyManagementDefaults() {
       form.elements[field].value = value;
     }
   });
+}
+
+function applyModeUI() {
+  document.body.classList.toggle("admin-mode", IS_ADMIN_MODE);
+  document.body.classList.toggle("public-mode", !IS_ADMIN_MODE);
+
+  document.querySelectorAll(".admin-only").forEach((element) => {
+    element.classList.toggle("hidden", !IS_ADMIN_MODE);
+  });
+
+  adminStatus.classList.toggle("hidden", !IS_ADMIN_MODE);
+  if (IS_ADMIN_MODE) {
+    pageTitle.textContent = "PCCC-CSQL – Trang quản trị dữ liệu";
+    headerEyebrow.textContent = "Quản trị nội bộ dữ liệu cơ sở thuộc diện quản lý PCCC";
+    resetBtn.textContent = "Làm mới";
+  } else {
+    pageTitle.textContent = "HỆ THỐNG TIẾP NHẬN THÔNG TIN CƠ SỞ PCCC";
+    headerEyebrow.textContent =
+      "Cơ quan quản lý nhà nước về PCCC: Đội CC&CNCH Khu vực 8 - Phòng Cảnh sát PCCC và CNCH CATP.HCM";
+    resetBtn.textContent = "Làm mới biểu mẫu";
+  }
 }
 
 function normalizeText(value) {
@@ -520,7 +546,7 @@ async function syncFacilityToGoogleSheet(facility) {
       syncStatus: "not_configured",
       lastSyncedAt: facility.lastSyncedAt || "",
       syncError: "",
-      message: "Đã lưu local. Chưa cấu hình Google Sheet.",
+      message: "Thông tin cơ sở đã được lưu tạm thời trên thiết bị. Chưa cấu hình đồng bộ Google Sheet.",
     };
   }
 
@@ -538,19 +564,21 @@ async function syncFacilityToGoogleSheet(facility) {
       syncStatus: "synced",
       lastSyncedAt: syncedAt,
       syncError: "",
-      message: "Đã lưu local và đã gửi Google Sheet.",
+      message: "Thông tin cơ sở đã được ghi nhận thành công trên hệ thống quản lý PCCC.",
     };
   } catch (error) {
     return {
       syncStatus: "failed",
       lastSyncedAt: facility.lastSyncedAt || "",
       syncError: error.message || "Không gửi được Google Sheet.",
-      message: "Đã lưu local. Gửi Google Sheet lỗi, dữ liệu local vẫn được giữ.",
+      message:
+        "Thông tin cơ sở đã được lưu trên thiết bị. Quá trình đồng bộ Google Sheet chưa thành công, vui lòng gửi lại sau.",
     };
   }
 }
 
 function renderSyncBadge(record) {
+  if (!IS_ADMIN_MODE) return "";
   return `<span class="${getSyncBadgeClass(record)}">${escapeHtml(getSyncLabel(record))}</span>`;
 }
 
@@ -607,9 +635,9 @@ function resetForm() {
   applyManagementDefaults();
   document.querySelector("#maCoSo").value = "";
   editingId = null;
-  formTitle.textContent = "Thêm hồ sơ cơ sở";
+  formTitle.textContent = IS_ADMIN_MODE ? "Thêm hồ sơ cơ sở" : "Biểu mẫu tiếp nhận thông tin cơ sở";
   formModeText.textContent = "Mã cơ sở sẽ được tự sinh khi lưu.";
-  submitBtn.textContent = "Lưu hồ sơ";
+  submitBtn.textContent = IS_ADMIN_MODE ? "Lưu hồ sơ" : "Gửi thông tin cơ sở";
   cancelEditBtn.classList.add("hidden");
   clearMessage();
   hideDuplicate();
@@ -643,6 +671,7 @@ function editFacility(id) {
 }
 
 function deleteFacility(id) {
+  if (!IS_ADMIN_MODE) return;
   const record = facilities.find((item) => item.id === id);
   if (!record) return;
 
@@ -690,6 +719,11 @@ function matchesFilters(record) {
 }
 
 function renderFacilities() {
+  if (!IS_ADMIN_MODE) {
+    renderDashboard();
+    return;
+  }
+
   const query = normalizeText(searchInput.value).toLowerCase();
   const filtered = facilities.filter((record) => getSearchableText(record).includes(query) && matchesFilters(record));
 
@@ -1355,6 +1389,7 @@ function init() {
   fillFilterSelect(filterWard, WARDS, "Tất cả");
   fillFilterSelect(filterSector, SECTOR_OPTIONS, "Tất cả");
   fillFilterSelect(filterApproval, APPROVAL_STATUS_OPTIONS, "Tất cả");
+  applyModeUI();
   form.elements.thanhPho.value = DEFAULT_CITY;
   applyManagementDefaults();
 

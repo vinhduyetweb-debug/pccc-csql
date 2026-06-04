@@ -10,10 +10,13 @@
   <body>
     <header class="app-header">
       <div>
-        <p class="eyebrow">Quản lý cơ sở PCCC cấp phường/xã</p>
-        <h1>PCCC-CSQL</h1>
+        <p id="headerEyebrow" class="eyebrow">
+          Cơ quan quản lý nhà nước về PCCC: Đội CC&CNCH Khu vực 8 - Phòng Cảnh sát PCCC và CNCH CATP.HCM
+        </p>
+        <h1 id="pageTitle">HỆ THỐNG TIẾP NHẬN THÔNG TIN CƠ SỞ PCCC</h1>
       </div>
-      <div class="header-actions">
+      <div id="adminStatus" class="admin-status hidden">Chế độ quản trị nội bộ</div>
+      <div class="header-actions admin-only hidden">
         <button id="exportCsvBtn" class="secondary" type="button">Export CSV</button>
         <button id="exportBackupBtn" class="secondary" type="button">Export Backup JSON</button>
         <button id="exportBtn" class="secondary" type="button">Xuất JSON</button>
@@ -26,6 +29,9 @@
 
     <main class="layout">
       <section class="form-panel" aria-labelledby="formTitle">
+        <div id="publicIntro" class="intro-card">
+          Vui lòng nhập đầy đủ, chính xác thông tin cơ sở để phục vụ công tác quản lý nhà nước về PCCC và CNCH.
+        </div>
         <div class="panel-title">
           <div>
             <h2 id="formTitle">Thêm hồ sơ cơ sở</h2>
@@ -79,7 +85,7 @@
           </fieldset>
 
           <fieldset>
-            <legend>Phân loại và hoạt động</legend>
+            <legend>Phân loại hoạt động</legend>
             <div class="grid">
               <label class="wide">
                 Lĩnh vực
@@ -97,6 +103,12 @@
                 Nhóm quản lý
                 <select name="nhomQuanLy" id="nhomQuanLy"></select>
               </label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Thông tin thẩm duyệt/nghiệm thu</legend>
+            <div class="grid">
               <label>
                 Tình trạng thẩm duyệt/nghiệm thu
                 <select name="tinhTrangThamDuyetNghiemThu" id="tinhTrangThamDuyetNghiemThu"></select>
@@ -146,7 +158,7 @@
           </fieldset>
 
           <fieldset>
-            <legend>Liên hệ và quản lý</legend>
+            <legend>Thông tin liên hệ</legend>
             <div class="grid">
               <label>
                 Người đứng đầu
@@ -164,6 +176,16 @@
                 SĐT người thường trực
                 <input name="sdtNguoiThuongTruc" inputmode="numeric" autocomplete="off" />
               </label>
+              <label class="wide">
+                Nội dung cần lưu ý
+                <textarea name="noiDungCanLuuY" rows="3"></textarea>
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Cơ quan/cán bộ quản lý</legend>
+            <div class="grid">
               <label>
                 Cơ quan quản lý nhà nước về PCCC
                 <input name="donViQuanLy" type="text" />
@@ -176,21 +198,20 @@
                 SĐT cán bộ quản lý
                 <input name="sdtCanBoQuanLy" inputmode="numeric" autocomplete="off" />
               </label>
-              <label class="wide">
-                Nội dung cần lưu ý
-                <textarea name="noiDungCanLuuY" rows="3"></textarea>
-              </label>
             </div>
           </fieldset>
 
           <div class="form-actions">
-            <button id="submitBtn" type="submit">Lưu hồ sơ</button>
+            <button id="submitBtn" type="submit">Gửi thông tin cơ sở</button>
             <button id="cancelEditBtn" class="secondary hidden" type="button">Hủy cập nhật</button>
           </div>
         </form>
+        <footer class="public-footer">
+          Dữ liệu được sử dụng phục vụ công tác quản lý nhà nước về PCCC và CNCH.
+        </footer>
       </section>
 
-      <section class="list-panel" aria-labelledby="listTitle">
+      <section class="list-panel admin-only hidden" aria-labelledby="listTitle">
         <div class="panel-title">
           <div>
             <h2 id="listTitle">Danh sách cơ sở</h2>
@@ -198,11 +219,11 @@
           </div>
         </div>
 
-        <div class="excel-import" aria-label="Import Excel">
+        <div class="excel-import" aria-label="Công cụ dữ liệu">
           <div class="panel-title">
             <div>
-              <h3>Import Excel</h3>
-              <p>Đọc sheet đầu tiên từ file .xlsx theo mẫu DANH SACH NHAP LIEU.xlsx.</p>
+              <h3>Công cụ dữ liệu</h3>
+              <p>Import Excel, import JSON, xuất CSV và backup dữ liệu local.</p>
             </div>
           </div>
           <div class="import-controls">

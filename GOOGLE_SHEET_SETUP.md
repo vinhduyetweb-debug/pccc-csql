@@ -60,7 +60,31 @@ function doPost(e) {
       return handleDelete(sheet, payload);
     }
 
+    if (payload.action === "LOOKUP_FACILITY") {
+      return handleLookup(sheet, payload);
+    }
+
     return jsonResponse({ success: false, message: "Action không hợp lệ" });
+  } catch (error) {
+    return jsonResponse({ success: false, message: error.message });
+  }
+}
+
+function doGet(e) {
+  try {
+    const sheet = getOrCreateSheet();
+    ensureHeader(sheet);
+
+    if (String(e.parameter.mode || "") === "lookup") {
+      return handleLookup(sheet, {
+        lookup: {
+          type: e.parameter.type || "",
+          value: e.parameter.value || "",
+        },
+      });
+    }
+
+    return jsonResponse({ success: false, message: "Mode khong hop le" });
   } catch (error) {
     return jsonResponse({ success: false, message: error.message });
   }
@@ -90,6 +114,89 @@ function handleDelete(sheet, payload) {
   }
 
   return jsonResponse({ success: false, message: "Không tìm thấy dòng cần xóa" });
+}
+
+function handleLookup(sheet, payload) {
+  const lookup = payload.lookup || {};
+  const type = String(lookup.type || "");
+  const value = normalizeDigits(lookup.value);
+  if (!value || !["pcccAccount", "phone"].includes(type)) {
+    return jsonResponse({ success: false, found: false, matches: [], message: "Lookup khong hop le" });
+  }
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return jsonResponse({ success: true, found: false, matches: [] });
+  }
+
+  const headers = getHeaders(sheet);
+  const values = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+  const matches = values
+    .filter((row) => rowMatchesLookup(row, headers, type, value))
+    .map((row) => rowToFacility(row, headers));
+
+  return jsonResponse({ success: true, found: matches.length > 0, matches });
+}
+
+function rowMatchesLookup(row, headers, type, value) {
+  if (type === "pcccAccount") {
+    return normalizeDigits(getRowValue(row, headers, "Số tài khoản PCCC")) === value;
+  }
+
+  return [
+    "SĐT người đứng đầu",
+    "SĐT người thường trực",
+    "SĐT cán bộ quản lý",
+  ].some((header) => normalizePhone(getRowValue(row, headers, header)) === value);
+}
+
+function rowToFacility(row, headers) {
+  const sector = String(getRowValue(row, headers, "Lĩnh vực") || "");
+  const sectorCodeMatch = /\b(I|II|III|IV|V|VI|VII|VIII|IX|X)\b/.exec(sector);
+  return {
+    id: String(getRowValue(row, headers, "id") || ""),
+    maCoSo: String(getRowValue(row, headers, "Mã cơ sở") || ""),
+    soHoSo: String(getRowValue(row, headers, "Số hồ sơ") || ""),
+    soTaiKhoanPCCC: normalizeDigits(getRowValue(row, headers, "Số tài khoản PCCC")),
+    tenCoSo: String(getRowValue(row, headers, "Tên cơ sở") || ""),
+    diaChi: String(getRowValue(row, headers, "Địa chỉ") || ""),
+    phuongXa: String(getRowValue(row, headers, "Phường/Xã") || ""),
+    thanhPho: String(getRowValue(row, headers, "Thành phố") || ""),
+    linhVucCode: sectorCodeMatch ? sectorCodeMatch[1] : "",
+    linhVucName: sector,
+    tinhChatHoatDong: String(getRowValue(row, headers, "Tính chất hoạt động") || ""),
+    thangNamHoatDong: String(getRowValue(row, headers, "Tháng năm hoạt động") || ""),
+    soTang: getRowValue(row, headers, "Số tầng"),
+    khoiTich: getRowValue(row, headers, "Khối tích"),
+    tongDienTichSan: getRowValue(row, headers, "Tổng diện tích sàn"),
+    nhomQuanLy: String(getRowValue(row, headers, "Nhóm quản lý") || ""),
+    tinhTrangThamDuyetNghiemThu: String(getRowValue(row, headers, "Tình trạng thẩm duyệt") || ""),
+    nguoiDungDau: String(getRowValue(row, headers, "Người đứng đầu") || ""),
+    sdtNguoiDungDau: normalizePhone(getRowValue(row, headers, "SĐT người đứng đầu")),
+    nguoiThuongTruc: String(getRowValue(row, headers, "Người thường trực") || ""),
+    sdtNguoiThuongTruc: normalizePhone(getRowValue(row, headers, "SĐT người thường trực")),
+    donViQuanLy: String(getRowValue(row, headers, "Cơ quan quản lý nhà nước về PCCC") || ""),
+    canBoQuanLy: String(getRowValue(row, headers, "Cán bộ quản lý") || ""),
+    sdtCanBoQuanLy: normalizePhone(getRowValue(row, headers, "SĐT cán bộ quản lý")),
+    noiDungCanLuuY: String(getRowValue(row, headers, "Nội dung cần lưu ý") || ""),
+    createdAt: String(getRowValue(row, headers, "Ngày tạo") || ""),
+    updatedAt: String(getRowValue(row, headers, "Ngày cập nhật") || ""),
+  };
+}
+
+function getRowValue(row, headers, header) {
+  const index = headers.indexOf(header);
+  return index >= 0 ? row[index] : "";
+}
+
+function normalizeDigits(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function normalizePhone(value) {
+  const digits = normalizeDigits(value);
+  if (digits.length === 9 && digits[0] !== "0") return "0" + digits;
+  return digits;
 }
 
 function getOrCreateSheet() {

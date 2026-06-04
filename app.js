@@ -1105,7 +1105,7 @@ function getLookupSummary(record) {
   `;
 }
 
-function renderLookupResults(records) {
+function renderLookupResults(records, source = "local") {
   if (!records.length) {
     lookupResult.className = "lookup-result info";
     lookupResult.innerHTML = "Chưa tìm thấy hồ sơ phù hợp. Vui lòng tiếp tục kê khai thông tin mới.";
@@ -1144,7 +1144,124 @@ function renderLookupResults(records) {
   `;
 }
 
-function searchPublicRecords(query) {
+function getLookupType(digits) {
+  return digits.length === 13 ? "pcccAccount" : "phone";
+}
+
+function findLocalLookupMatches(digits) {
+  if (digits.length === 13) {
+    return facilities.filter((record) => getAccountLookupKey(record) === digits);
+  }
+
+  const primaryMatches = facilities.filter((record) =>
+    [record.sdtNguoiDungDau, record.sdtNguoiThuongTruc].map(normalizePhoneDigits).includes(digits),
+  );
+  if (primaryMatches.length) return primaryMatches;
+
+  return facilities.filter((record) => getPhoneLookupKeys(record).includes(digits));
+}
+
+function normalizeSheetFacility(record) {
+  const now = new Date().toISOString();
+  const data = sanitizeImportedRecord(record || {});
+  return withSyncDefaults({
+    ...record,
+    ...data,
+    id: normalizeText(record?.id) || createId(),
+    maCoSo: normalizeText(record?.maCoSo) || getNextFacilityCode(),
+    createdAt: normalizeText(record?.createdAt) || now,
+    updatedAt: normalizeText(record?.updatedAt) || now,
+    syncStatus: "synced",
+    lastSyncedAt: now,
+    syncError: "",
+  });
+}
+
+function findLocalRecordForSheetFacility(record) {
+  const account = getAccountLookupKey(record);
+  return facilities.find((item) =>
+    (record.id && item.id === record.id) ||
+    (record.maCoSo && item.maCoSo === record.maCoSo) ||
+    (account && getAccountLookupKey(item) === account),
+  );
+}
+
+function isNewerThan(a, b) {
+  const aTime = new Date(a || "").getTime();
+  const bTime = new Date(b || "").getTime();
+  if (Number.isNaN(aTime)) return false;
+  if (Number.isNaN(bTime)) return true;
+  return aTime > bTime;
+}
+
+function cacheSheetLookupMatches(matches) {
+  const cached = matches.map(normalizeSheetFacility);
+  let changed = false;
+
+  cached.forEach((sheetRecord) => {
+    const localRecord = findLocalRecordForSheetFacility(sheetRecord);
+    if (!localRecord) {
+      facilities.push(sheetRecord);
+      changed = true;
+      return;
+    }
+
+    if (isNewerThan(localRecord.updatedAt, sheetRecord.updatedAt)) return;
+
+    facilities = facilities.map((item) =>
+      item.id === localRecord.id
+        ? {
+            ...item,
+            ...sheetRecord,
+            id: item.id,
+            maCoSo: item.maCoSo || sheetRecord.maCoSo,
+            createdAt: item.createdAt || sheetRecord.createdAt,
+          }
+        : item,
+    );
+    changed = true;
+  });
+
+  if (changed) {
+    normalizeExistingFacilitiesForLookup();
+    saveFacilities();
+    renderFacilities();
+  }
+
+  return cached.map((record) => findLocalRecordForSheetFacility(record) || record);
+}
+
+async function lookupFacilityFromSheet(digits) {
+  const lookup = { type: getLookupType(digits), value: digits };
+  const payload = {
+    action: "LOOKUP_FACILITY",
+    appName: "PCCC-CSQL",
+    version: "FINAL_LOCAL_PRO",
+    lookup,
+  };
+
+  try {
+    const response = await fetch(GOOGLE_SHEET_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8",
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) throw new Error(`Lookup POST failed: ${response.status}`);
+    return await response.json();
+  } catch (error) {
+    const url = new URL(GOOGLE_SHEET_ENDPOINT);
+    url.searchParams.set("mode", "lookup");
+    url.searchParams.set("type", lookup.type);
+    url.searchParams.set("value", lookup.value);
+    const response = await fetch(url.toString(), { method: "GET" });
+    if (!response.ok) throw error;
+    return response.json();
+  }
+}
+
+async function searchPublicRecords(query) {
   const digits = normalizeDigits(query);
   if (![10, 13].includes(digits.length)) {
     lookupResult.className = "lookup-result error";
@@ -1152,20 +1269,39 @@ function searchPublicRecords(query) {
     return;
   }
 
-  if (digits.length === 13) {
-    renderLookupResults(facilities.filter((record) => getAccountLookupKey(record) === digits));
+  const localMatches = findLocalLookupMatches(digits);
+  if (localMatches.length) {
+    renderLookupResults(localMatches);
     return;
   }
 
-  const primaryMatches = facilities.filter((record) =>
-    [record.sdtNguoiDungDau, record.sdtNguoiThuongTruc].map(normalizePhoneDigits).includes(digits),
-  );
-  if (primaryMatches.length) {
-    renderLookupResults(primaryMatches);
+  if (!GOOGLE_SHEET_ENDPOINT) {
+    lookupResult.className = "lookup-result info";
+    lookupResult.innerHTML =
+      "Chưa tìm thấy hồ sơ trên thiết bị này. Hệ thống chưa cấu hình tra cứu dữ liệu tập trung.";
     return;
   }
 
-  renderLookupResults(facilities.filter((record) => getPhoneLookupKeys(record).includes(digits)));
+  lookupResult.className = "lookup-result info";
+  lookupResult.innerHTML = "Đang tra cứu dữ liệu tập trung...";
+
+  try {
+    const result = await lookupFacilityFromSheet(digits);
+    const matches = Array.isArray(result?.matches) ? result.matches : [];
+    if (!result?.success) {
+      throw new Error(result?.message || "Lookup Sheet không thành công.");
+    }
+    if (!matches.length) {
+      renderLookupResults([]);
+      return;
+    }
+
+    renderLookupResults(cacheSheetLookupMatches(matches), "sheet");
+  } catch (error) {
+    lookupResult.className = "lookup-result error";
+    lookupResult.innerHTML =
+      "Không thể tra cứu dữ liệu tập trung tại thời điểm này. Vui lòng thử lại hoặc tiếp tục kê khai mới.";
+  }
 }
 
 function loadLookupRecord(id) {

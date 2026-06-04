@@ -10,10 +10,14 @@
   <body>
     <header class="app-header">
       <div>
-        <p id="headerEyebrow" class="eyebrow">
-          Cơ quan quản lý nhà nước về PCCC: Đội CC&CNCH Khu vực 8 - Phòng Cảnh sát PCCC và CNCH CATP.HCM
-        </p>
+        <p id="headerEyebrow" class="eyebrow">Cổng tiếp nhận thông tin cơ sở</p>
         <h1 id="pageTitle">HỆ THỐNG TIẾP NHẬN THÔNG TIN CƠ SỞ PCCC</h1>
+        <p id="headerSubtitle" class="header-subtitle">
+          Phục vụ công tác quản lý nhà nước về phòng cháy, chữa cháy và cứu nạn, cứu hộ
+        </p>
+        <p id="headerAgency" class="header-agency">
+          Cơ quan tiếp nhận: Đội CC&CNCH Khu vực 8 - Phòng Cảnh sát PCCC và CNCH CATP.HCM
+        </p>
       </div>
       <div id="adminStatus" class="admin-status hidden">Chế độ quản trị nội bộ</div>
       <div class="header-actions admin-only hidden">
@@ -30,7 +34,8 @@
     <main class="layout">
       <section class="form-panel" aria-labelledby="formTitle">
         <div id="publicIntro" class="intro-card">
-          Vui lòng nhập đầy đủ, chính xác thông tin cơ sở để phục vụ công tác quản lý nhà nước về PCCC và CNCH.
+          Kính đề nghị cơ sở kê khai đầy đủ, chính xác các thông tin dưới đây. Dữ liệu được sử dụng phục vụ công tác
+          quản lý nhà nước về PCCC và CNCH.
         </div>
         <div class="panel-title">
           <div>
@@ -58,6 +63,7 @@
               <label>
                 Số tài khoản CSDL Quốc gia PCCC
                 <input name="soTaiKhoanPCCC" inputmode="numeric" autocomplete="off" />
+                <small class="field-help">Nếu có, nhập đúng 13 chữ số trên hệ thống CSDL Quốc gia về PCCC.</small>
               </label>
               <label>
                 Tên cơ sở <span class="required">*</span>
@@ -67,7 +73,7 @@
           </fieldset>
 
           <fieldset>
-            <legend>Địa chỉ</legend>
+            <legend>Địa chỉ cơ sở</legend>
             <div class="grid">
               <label class="wide">
                 Địa chỉ <span class="required">*</span>
@@ -85,7 +91,7 @@
           </fieldset>
 
           <fieldset>
-            <legend>Phân loại hoạt động</legend>
+            <legend>Lĩnh vực, hoạt động và phân loại</legend>
             <div class="grid">
               <label class="wide">
                 Lĩnh vực
@@ -107,11 +113,12 @@
           </fieldset>
 
           <fieldset>
-            <legend>Thông tin thẩm duyệt/nghiệm thu</legend>
+            <legend>Thẩm duyệt, nghiệm thu và tình trạng PCCC</legend>
             <div class="grid">
               <label>
                 Tình trạng thẩm duyệt/nghiệm thu
                 <select name="tinhTrangThamDuyetNghiemThu" id="tinhTrangThamDuyetNghiemThu"></select>
+                <small class="field-help">Chọn tình trạng phù hợp với hồ sơ pháp lý hiện có của cơ sở.</small>
               </label>
             </div>
           </fieldset>
@@ -167,6 +174,7 @@
               <label>
                 SĐT người đứng đầu
                 <input name="sdtNguoiDungDau" inputmode="numeric" autocomplete="off" />
+                <small class="field-help">Số điện thoại gồm 10 chữ số và bắt đầu bằng 0.</small>
               </label>
               <label>
                 Người thường trực
@@ -175,6 +183,7 @@
               <label>
                 SĐT người thường trực
                 <input name="sdtNguoiThuongTruc" inputmode="numeric" autocomplete="off" />
+                <small class="field-help">Số điện thoại gồm 10 chữ số và bắt đầu bằng 0.</small>
               </label>
               <label class="wide">
                 Nội dung cần lưu ý
@@ -197,11 +206,13 @@
               <label>
                 SĐT cán bộ quản lý
                 <input name="sdtCanBoQuanLy" inputmode="numeric" autocomplete="off" />
+                <small class="field-help">Số điện thoại gồm 10 chữ số và bắt đầu bằng 0.</small>
               </label>
             </div>
           </fieldset>
 
           <div class="form-actions">
+            <button id="reviewBtn" class="secondary" type="button">Xem lại trước khi gửi</button>
             <button id="submitBtn" type="submit">Gửi thông tin cơ sở</button>
             <button id="cancelEditBtn" class="secondary hidden" type="button">Hủy cập nhật</button>
           </div>
@@ -243,12 +254,29 @@
         </div>
 
         <div class="dashboard" aria-label="Dashboard thống kê">
-          <div class="stat-card total">
-            <span class="stat-label">Tổng số cơ sở</span>
-            <strong id="statTotal">0</strong>
+          <div class="stat-group dashboard-overview">
+            <h3>Tổng quan</h3>
+            <div class="stat-grid">
+              <div class="stat-card total">
+                <span class="stat-label">Tổng số cơ sở</span>
+                <strong id="statTotal">0</strong>
+              </div>
+              <div class="stat-card warning">
+                <span class="stat-label">Thiếu dữ liệu</span>
+                <strong id="statMissing">0</strong>
+              </div>
+              <div class="stat-card warning">
+                <span class="stat-label">Có vi phạm PCCC</span>
+                <strong id="statViolation">0</strong>
+              </div>
+              <div class="stat-card warning">
+                <span class="stat-label">Bị đình chỉ</span>
+                <strong id="statSuspended">0</strong>
+              </div>
+            </div>
           </div>
           <div class="stat-group">
-            <h3>Theo phường/xã</h3>
+            <h3>Theo địa bàn</h3>
             <div id="wardStats" class="stat-grid"></div>
           </div>
           <div class="stat-group">
@@ -256,26 +284,8 @@
             <div id="sectorStats" class="sector-grid"></div>
           </div>
           <div class="stat-group">
-            <h3>Theo tình trạng hoạt động</h3>
-            <div id="activityStats" class="stat-grid"></div>
-          </div>
-          <div class="stat-group">
             <h3>Theo thẩm duyệt/nghiệm thu</h3>
             <div id="approvalStats" class="stat-grid"></div>
-          </div>
-          <div class="stat-grid">
-            <div class="stat-card warning">
-              <span class="stat-label">Thiếu dữ liệu</span>
-              <strong id="statMissing">0</strong>
-            </div>
-            <div class="stat-card warning">
-              <span class="stat-label">Có vi phạm PCCC</span>
-              <strong id="statViolation">0</strong>
-            </div>
-            <div class="stat-card warning">
-              <span class="stat-label">Bị đình chỉ</span>
-              <strong id="statSuspended">0</strong>
-            </div>
           </div>
         </div>
 
@@ -323,6 +333,7 @@
                 <th>Lĩnh vực</th>
                 <th>Người đứng đầu</th>
                 <th>SĐT</th>
+                <th>Trạng thái</th>
                 <th>Thao tác</th>
               </tr>
             </thead>
@@ -340,7 +351,8 @@
         <div id="confirmModalDetails" class="modal-details"></div>
         <p class="modal-note">Vui lòng chụp màn hình thông báo này để lưu lại thông tin xác nhận.</p>
         <div class="modal-actions">
-          <button id="modalCloseBtn" type="button" class="secondary">Đóng</button>
+          <button id="modalCloseBtn" type="button" class="secondary">Đã hiểu</button>
+          <button id="modalSubmitBtn" type="button" class="hidden">Xác nhận gửi</button>
           <button id="modalNewBtn" type="button">Nhập hồ sơ khác</button>
         </div>
       </div>

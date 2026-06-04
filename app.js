@@ -138,6 +138,7 @@ const formModeText = document.querySelector("#formModeText");
 const submitBtn = document.querySelector("#submitBtn");
 const cancelEditBtn = document.querySelector("#cancelEditBtn");
 const resetBtn = document.querySelector("#resetBtn");
+const reviewBtn = document.querySelector("#reviewBtn");
 const exportBtn = document.querySelector("#exportBtn");
 const exportCsvBtn = document.querySelector("#exportCsvBtn");
 const exportBackupBtn = document.querySelector("#exportBackupBtn");
@@ -162,14 +163,19 @@ const filterApproval = document.querySelector("#filterApproval");
 const filterFlag = document.querySelector("#filterFlag");
 const pageTitle = document.querySelector("#pageTitle");
 const headerEyebrow = document.querySelector("#headerEyebrow");
+const headerSubtitle = document.querySelector("#headerSubtitle");
+const headerAgency = document.querySelector("#headerAgency");
 const adminStatus = document.querySelector("#adminStatus");
 const publicIntro = document.querySelector("#publicIntro");
 const confirmModal = document.querySelector("#confirmModal");
 const confirmModalTitle = document.querySelector("#confirmModalTitle");
 const confirmModalMessage = document.querySelector("#confirmModalMessage");
 const confirmModalDetails = document.querySelector("#confirmModalDetails");
+const modalNote = document.querySelector(".modal-note");
 const modalCloseBtn = document.querySelector("#modalCloseBtn");
+const modalSubmitBtn = document.querySelector("#modalSubmitBtn");
 const modalNewBtn = document.querySelector("#modalNewBtn");
+let reviewSubmitPending = false;
 
 let facilities = loadFacilities();
 let editingId = null;
@@ -244,13 +250,18 @@ function applyModeUI() {
 
   adminStatus.classList.toggle("hidden", !IS_ADMIN_MODE);
   if (IS_ADMIN_MODE) {
-    pageTitle.textContent = "PCCC-CSQL – Trang quản trị dữ liệu";
+    pageTitle.textContent = "PCCC-CSQL – Trang quản trị dữ liệu cơ sở PCCC";
     headerEyebrow.textContent = "Quản trị nội bộ dữ liệu cơ sở thuộc diện quản lý PCCC";
+    headerSubtitle.textContent = "Theo dõi, rà soát, import/export và đồng bộ dữ liệu quản lý PCCC";
+    headerAgency.textContent = "";
     resetBtn.textContent = "Làm mới";
   } else {
     pageTitle.textContent = "HỆ THỐNG TIẾP NHẬN THÔNG TIN CƠ SỞ PCCC";
-    headerEyebrow.textContent =
-      "Cơ quan quản lý nhà nước về PCCC: Đội CC&CNCH Khu vực 8 - Phòng Cảnh sát PCCC và CNCH CATP.HCM";
+    headerEyebrow.textContent = "Cổng tiếp nhận thông tin cơ sở";
+    headerSubtitle.textContent =
+      "Phục vụ công tác quản lý nhà nước về phòng cháy, chữa cháy và cứu nạn, cứu hộ";
+    headerAgency.textContent =
+      "Cơ quan tiếp nhận: Đội CC&CNCH Khu vực 8 - Phòng Cảnh sát PCCC và CNCH CATP.HCM";
     resetBtn.textContent = "Làm mới biểu mẫu";
   }
 }
@@ -449,6 +460,7 @@ function showConfirmationModal(facility, result) {
   const isFailed = result.syncStatus === "failed";
   const isNotConfigured = result.syncStatus === "not_configured";
 
+  confirmModal.classList.remove("review-modal");
   confirmModalTitle.textContent = isFailed || isNotConfigured
     ? "THÔNG TIN ĐÃ ĐƯỢC LƯU TẠM THỜI"
     : "THÔNG TIN ĐÃ ĐƯỢC GHI NHẬN";
@@ -458,8 +470,14 @@ function showConfirmationModal(facility, result) {
     : "Thông tin cơ sở đã được ghi nhận thành công trên hệ thống quản lý PCCC.";
 
   confirmModalDetails.innerHTML = `
+    <div class="modal-status-row"><span>Trạng thái</span><strong>Đã tiếp nhận</strong></div>
     <div><span>Tên cơ sở</span><strong>${escapeHtml(facility.tenCoSo)}</strong></div>
     <div><span>Mã cơ sở</span><strong>${escapeHtml(facility.maCoSo)}</strong></div>
+    ${
+      facility.soTaiKhoanPCCC
+        ? `<div><span>Số tài khoản PCCC</span><strong>${escapeHtml(facility.soTaiKhoanPCCC)}</strong></div>`
+        : ""
+    }
     <div><span>Thời gian ghi nhận</span><strong>${escapeHtml(formatConfirmationTime(result.lastSyncedAt || facility.updatedAt))}</strong></div>
     <div><span>Cơ quan tiếp nhận</span><strong>${escapeHtml(DEFAULT_MANAGEMENT_INFO.donViQuanLy)}</strong></div>
     <div><span>Cán bộ quản lý</span><strong>${escapeHtml(DEFAULT_MANAGEMENT_INFO.canBoQuanLy)}</strong></div>
@@ -467,10 +485,51 @@ function showConfirmationModal(facility, result) {
   `;
 
   confirmModal.classList.remove("hidden");
+  modalNote.textContent = "Vui lòng chụp màn hình thông báo này để lưu lại thông tin xác nhận.";
+  modalCloseBtn.textContent = "Đã hiểu";
+  modalSubmitBtn.classList.add("hidden");
+  modalNewBtn.classList.remove("hidden");
 }
 
 function closeConfirmationModal() {
   confirmModal.classList.add("hidden");
+  confirmModal.classList.remove("review-modal");
+  reviewSubmitPending = false;
+}
+
+function showReviewModal() {
+  clearMessage();
+  const data = getFormData();
+  const { errors, duplicate } = validateFacility(data, editingId);
+
+  if (errors.length) {
+    setMessage(errors.join(" "), "error");
+    return;
+  }
+
+  if (duplicate) {
+    showDuplicate(duplicate);
+    return;
+  }
+
+  confirmModal.classList.add("review-modal");
+  confirmModalTitle.textContent = "XEM LẠI THÔNG TIN TRƯỚC KHI GỬI";
+  confirmModalMessage.textContent = "Vui lòng kiểm tra các thông tin chính trước khi gửi lên hệ thống quản lý PCCC.";
+  confirmModalDetails.innerHTML = `
+    <div><span>Tên cơ sở</span><strong>${escapeHtml(data.tenCoSo)}</strong></div>
+    <div><span>Số tài khoản PCCC</span><strong>${escapeHtml(data.soTaiKhoanPCCC || "Chưa khai báo")}</strong></div>
+    <div><span>Địa chỉ</span><strong>${escapeHtml(data.diaChi)}</strong></div>
+    <div><span>Phường/Xã</span><strong>${escapeHtml(data.phuongXa)}</strong></div>
+    <div><span>Lĩnh vực</span><strong>${escapeHtml(data.linhVucName || data.linhVucCode)}</strong></div>
+    <div><span>Người đứng đầu</span><strong>${escapeHtml(data.nguoiDungDau || "Chưa khai báo")}</strong></div>
+    <div><span>SĐT người đứng đầu</span><strong>${escapeHtml(data.sdtNguoiDungDau || "Chưa khai báo")}</strong></div>
+  `;
+  confirmModal.classList.remove("hidden");
+  modalNote.textContent = "Chỉ bấm xác nhận gửi khi các thông tin chính đã đúng.";
+  modalCloseBtn.textContent = "Đóng";
+  modalSubmitBtn.classList.remove("hidden");
+  modalNewBtn.classList.add("hidden");
+  reviewSubmitPending = true;
 }
 
 function showDuplicate(record) {
@@ -678,15 +737,17 @@ function renderDashboard() {
     `;
   }).join("");
 
-  activityStats.innerHTML = ACTIVITY_OPTIONS.map((status) => {
-    const count = facilities.filter((record) => record.tinhChatHoatDong === status).length;
-    return `
-      <div class="stat-card">
-        <span class="stat-label">${escapeHtml(status)}</span>
-        <strong>${count}</strong>
-      </div>
-    `;
-  }).join("");
+  if (activityStats) {
+    activityStats.innerHTML = ACTIVITY_OPTIONS.map((status) => {
+      const count = facilities.filter((record) => record.tinhChatHoatDong === status).length;
+      return `
+        <div class="stat-card">
+          <span class="stat-label">${escapeHtml(status)}</span>
+          <strong>${count}</strong>
+        </div>
+      `;
+    }).join("");
+  }
 
   approvalStats.innerHTML = APPROVAL_STATUS_OPTIONS.map((status) => {
     const count = facilities.filter((record) => record.tinhTrangThamDuyetNghiemThu === status).length;
@@ -805,7 +866,7 @@ function renderFacilities() {
   if (!filtered.length) {
     tableBody.innerHTML = `
       <tr>
-        <td colspan="9" class="muted">Chưa có hồ sơ phù hợp.</td>
+        <td colspan="10" class="muted">Chưa có hồ sơ phù hợp.</td>
       </tr>
     `;
     return;
@@ -823,15 +884,14 @@ function renderFacilities() {
       <td>${escapeHtml(record.maCoSo)}</td>
       <td>${escapeHtml(record.soTaiKhoanPCCC)}</td>
       <td>
-        <strong>${escapeHtml(record.tenCoSo)}</strong><br />
-        ${missingBadge}
-        ${renderSyncBadge(record)}
+        <strong>${escapeHtml(record.tenCoSo)}</strong>
       </td>
       <td>${escapeHtml(record.diaChi)}</td>
       <td>${escapeHtml(record.phuongXa)}</td>
       <td>${escapeHtml(record.linhVucCode)}<br /><span class="muted">${escapeHtml(record.nhomQuanLy)}</span></td>
       <td>${escapeHtml(record.nguoiDungDau)}</td>
       <td>${escapeHtml(phone)}</td>
+      <td>${missingBadge}${renderSyncBadge(record)}</td>
       <td>
         <div class="row-actions">
           <button type="button" data-action="edit" data-id="${record.id}">Sửa</button>
@@ -1477,12 +1537,18 @@ function init() {
   duplicateBox.addEventListener("click", handleDuplicateClick);
   searchInput.addEventListener("input", renderFacilities);
   resetBtn.addEventListener("click", resetForm);
+  reviewBtn.addEventListener("click", showReviewModal);
   cancelEditBtn.addEventListener("click", resetForm);
   exportBtn.addEventListener("click", exportJson);
   exportCsvBtn.addEventListener("click", exportCsv);
   exportBackupBtn.addEventListener("click", exportBackupJson);
   importInput.addEventListener("change", importJson);
   modalCloseBtn.addEventListener("click", closeConfirmationModal);
+  modalSubmitBtn.addEventListener("click", () => {
+    if (!reviewSubmitPending) return;
+    closeConfirmationModal();
+    form.requestSubmit();
+  });
   modalNewBtn.addEventListener("click", () => {
     closeConfirmationModal();
     resetForm();

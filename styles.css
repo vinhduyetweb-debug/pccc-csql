@@ -339,6 +339,24 @@ button:hover,
   font-size: 16px;
 }
 
+.data-source-note {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid #d7e0ea;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.data-source-note h4 {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+
+.data-source-note p {
+  margin: 0;
+  color: var(--muted);
+}
+
 .import-controls {
   display: flex;
   align-items: center;
@@ -372,6 +390,28 @@ button:disabled,
   border-radius: 8px;
   background: #fff;
   padding: 12px;
+}
+
+.sync-all-status {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.sync-all-status.success {
+  border-color: #b7ead5;
+  background: var(--ok-bg);
+  color: #116149;
+}
+
+.sync-all-status.error {
+  border-color: #ffb4ad;
+  background: var(--danger-bg);
+  color: var(--danger);
 }
 
 .preview-summary {

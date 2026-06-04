@@ -254,6 +254,13 @@
               <p>Import Excel, import JSON, xuất CSV và backup dữ liệu local.</p>
             </div>
           </div>
+          <div class="data-source-note">
+            <h4>Nguồn dữ liệu tra cứu</h4>
+            <p>
+              Trang public tra cứu hồ sơ từ dữ liệu đang lưu trong trình duyệt này. Nếu Google Sheet đã có dữ liệu nhưng trang
+              public không tìm thấy, cần Import Excel/JSON vào app trước hoặc khôi phục dữ liệu local.
+            </p>
+          </div>
           <div class="import-controls">
             <label class="secondary file-button">
               Import Excel
@@ -266,7 +273,9 @@
             </label>
             <button id="confirmExcelImportBtn" type="button" class="hidden" disabled>Xác nhận Import</button>
             <button id="cancelExcelImportBtn" class="secondary hidden" type="button">Hủy</button>
+            <button id="syncAllSheetBtn" class="secondary" type="button">Đồng bộ toàn bộ lên Google Sheet</button>
           </div>
+          <div id="syncAllStatus" class="sync-all-status hidden" role="status"></div>
           <div id="excelPreview" class="excel-preview hidden"></div>
         </div>
 

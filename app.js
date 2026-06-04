@@ -149,6 +149,8 @@ const updateDuplicatesInput = document.querySelector("#updateDuplicatesInput");
 const confirmExcelImportBtn = document.querySelector("#confirmExcelImportBtn");
 const cancelExcelImportBtn = document.querySelector("#cancelExcelImportBtn");
 const excelPreview = document.querySelector("#excelPreview");
+const syncAllSheetBtn = document.querySelector("#syncAllSheetBtn");
+const syncAllStatus = document.querySelector("#syncAllStatus");
 const statTotal = document.querySelector("#statTotal");
 const wardStats = document.querySelector("#wardStats");
 const sectorStats = document.querySelector("#sectorStats");
@@ -480,6 +482,20 @@ function clearMessage() {
   messageBox.className = "message hidden";
 }
 
+function getLocalImportSyncPrompt() {
+  return "Dữ liệu đã được nạp vào trình duyệt này. Để cập nhật Google Sheet, vui lòng bấm 'Đồng bộ toàn bộ lên Google Sheet'.";
+}
+
+function setSyncAllStatus(text, type = "info") {
+  syncAllStatus.textContent = text;
+  syncAllStatus.className = `sync-all-status ${type}`;
+}
+
+function clearSyncAllStatus() {
+  syncAllStatus.textContent = "";
+  syncAllStatus.className = "sync-all-status hidden";
+}
+
 function formatConfirmationTime(value) {
   return formatDateTime(value || new Date().toISOString()) || new Date().toLocaleString("vi-VN");
 }
@@ -704,6 +720,58 @@ async function syncFacilityToGoogleSheet(facility) {
         "Thông tin cơ sở đã được lưu trên thiết bị. Quá trình đồng bộ Google Sheet chưa thành công, vui lòng gửi lại sau.",
     };
   }
+}
+
+async function syncAllFacilitiesToGoogleSheet() {
+  if (!IS_ADMIN_MODE) return;
+
+  if (!GOOGLE_SHEET_ENDPOINT) {
+    setSyncAllStatus("Chưa cấu hình Google Sheet endpoint nên không thể đồng bộ toàn bộ.", "error");
+    return;
+  }
+
+  const total = facilities.length;
+  if (!total) {
+    setSyncAllStatus("Chưa có hồ sơ local để đồng bộ lên Google Sheet.", "info");
+    return;
+  }
+
+  syncAllSheetBtn.disabled = true;
+  let success = 0;
+  let failed = 0;
+
+  try {
+    for (let index = 0; index < total; index += 1) {
+      const record = facilities[index];
+      setSyncAllStatus(`Đang đồng bộ ${index + 1}/${total} hồ sơ...`, "info");
+
+      try {
+        await postGoogleSheetPayload("UPSERT_FACILITY", record);
+        const lastSyncedAt = new Date().toISOString();
+        facilities = facilities.map((item) =>
+          item.id === record.id ? { ...item, syncStatus: "synced", lastSyncedAt, syncError: "" } : item,
+        );
+        success += 1;
+      } catch (error) {
+        facilities = facilities.map((item) =>
+          item.id === record.id
+            ? { ...item, syncStatus: "failed", syncError: error.message || "Không gửi được Google Sheet." }
+            : item,
+        );
+        failed += 1;
+      }
+
+      saveFacilities();
+    }
+  } finally {
+    syncAllSheetBtn.disabled = false;
+  }
+
+  renderFacilities();
+  const completedAt = new Date().toLocaleString("vi-VN");
+  const finalMessage = `Hoàn tất đồng bộ. Tổng số: ${total}. Gửi thành công: ${success}. Gửi lỗi: ${failed}. Thời gian hoàn thành: ${completedAt}.`;
+  setSyncAllStatus(finalMessage, failed ? "error" : "success");
+  setMessage(finalMessage, failed ? "error" : "success");
 }
 
 async function deleteFacilityFromGoogleSheet(facility) {
@@ -1571,7 +1639,7 @@ function confirmImport() {
   saveFacilities();
   renderFacilities();
   setMessage(
-    `Import Excel hoàn tất. Đã thêm mới ${created} hồ sơ. Cập nhật ${updated} hồ sơ. Bỏ qua ${pendingImportPreview.errorRows.length} dòng lỗi. Bỏ qua ${pendingImportPreview.skippedDuplicateRows.length} hồ sơ trùng.`,
+    `Import Excel hoàn tất. Đã thêm mới ${created} hồ sơ. Cập nhật ${updated} hồ sơ. Bỏ qua ${pendingImportPreview.errorRows.length} dòng lỗi. Bỏ qua ${pendingImportPreview.skippedDuplicateRows.length} hồ sơ trùng. ${getLocalImportSyncPrompt()}`,
     "success",
   );
   resetExcelImport();
@@ -1623,19 +1691,30 @@ async function importJson(event) {
         return;
       }
 
+      const sourceId = normalizeText(record.id);
+      const sourceCode = normalizeText(record.maCoSo);
+      const canKeepSourceId = sourceId && !facilities.some((item) => item.id === sourceId);
+      const canKeepSourceCode = sourceCode && !facilities.some((item) => item.maCoSo === sourceCode);
+
       facilities.push(withSyncDefaults({
-        id: createId(),
-        maCoSo: getNextFacilityCode(),
+        id: canKeepSourceId ? sourceId : createId(),
+        maCoSo: canKeepSourceCode ? sourceCode : getNextFacilityCode(),
         ...data,
         createdAt: record.createdAt || now,
-        updatedAt: now,
+        updatedAt: record.updatedAt || now,
+        syncStatus: record.syncStatus,
+        lastSyncedAt: record.lastSyncedAt,
+        syncError: record.syncError,
       }));
       imported += 1;
     });
 
     saveFacilities();
     renderFacilities();
-    setMessage(`Đã nhập ${imported} hồ sơ. Bỏ qua ${skipped} hồ sơ lỗi hoặc trùng số tài khoản PCCC.`, "success");
+    setMessage(
+      `Đã nhập ${imported} hồ sơ. Bỏ qua ${skipped} hồ sơ lỗi hoặc trùng số tài khoản PCCC. ${getLocalImportSyncPrompt()}`,
+      "success",
+    );
   } catch (error) {
     setMessage(error.message || "Không thể nhập tệp JSON.", "error");
   } finally {
@@ -1751,6 +1830,7 @@ function init() {
   previewExcelBtn.addEventListener("click", handlePreviewExcel);
   confirmExcelImportBtn.addEventListener("click", confirmImport);
   cancelExcelImportBtn.addEventListener("click", resetExcelImport);
+  syncAllSheetBtn.addEventListener("click", syncAllFacilitiesToGoogleSheet);
   updateDuplicatesInput.addEventListener("change", () => {
     if (selectedExcelFile) {
       confirmExcelImportBtn.disabled = true;

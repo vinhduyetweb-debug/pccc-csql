@@ -1,6 +1,6 @@
 const STORAGE_KEY = "pccc-csql.facilities.v1";
 const DEFAULT_CITY = "TP. Hồ Chí Minh";
-const GOOGLE_SHEET_ENDPOINT = "https://script.google.com/macros/s/AKfycbzfYc-1Oea0GciABjnXGZyMHqVgXzqIvAclYl-PIFNtQfyOqA2me9171YQndL88yuqL/exec";
+const GOOGLE_SHEET_ENDPOINT = "https://script.google.com/macros/s/AKfycbwRVxo2bgUNWA58yIw0id28JbhpbJ9uHxdzDab_y4J2Adjpqc3e4dmqRmj_2J-MeL5W/exec";
 const IS_ADMIN_MODE = new URLSearchParams(window.location.search).get("admin") === "1";
 
 const DEFAULT_MANAGEMENT_INFO = {

@@ -92,25 +92,28 @@ function doGet(e) {
 
 function handleUpsert(sheet, payload) {
   const facility = payload.facility || {};
-  const row = findRowByKeys(sheet, facility);
+  const match = findRowByKeys(sheet, facility);
   const rowValues = buildRow(payload.syncedAt, facility, "active");
 
-  if (row > 0) {
-    sheet.getRange(row, 1, 1, HEADERS.length).setValues([rowValues]);
-    return jsonResponse({ success: true, action: "updated", row });
+  if (match.row > 0) {
+    sheet.getRange(match.row, 1, 1, HEADERS.length).setValues([rowValues]);
+    logSyncResult("UPSERT", "UPDATE", match.matchedBy, match.row);
+    return jsonResponse({ success: true, action: "updated", mode: "UPDATE", matchedBy: match.matchedBy, targetRow: match.row });
   }
 
   sheet.appendRow(rowValues);
-  return jsonResponse({ success: true, action: "created", row: sheet.getLastRow() });
+  const targetRow = sheet.getLastRow();
+  logSyncResult("UPSERT", "INSERT", "none", targetRow);
+  return jsonResponse({ success: true, action: "created", mode: "INSERT", matchedBy: "none", targetRow });
 }
 
 function handleDelete(sheet, payload) {
   const facility = payload.facility || {};
-  const row = findRowByKeys(sheet, facility);
+  const match = findRowByKeys(sheet, facility);
 
-  if (row > 0) {
-    sheet.deleteRow(row);
-    return jsonResponse({ success: true, action: "deleted", row });
+  if (match.row > 0) {
+    sheet.deleteRow(match.row);
+    return jsonResponse({ success: true, action: "deleted", matchedBy: match.matchedBy, targetRow: match.row });
   }
 
   return jsonResponse({ success: false, message: "Không tìm thấy dòng cần xóa" });
@@ -217,29 +220,49 @@ function ensureHeader(sheet) {
 
 function findRowByKeys(sheet, facility) {
   const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return -1;
+  if (lastRow < 2) return { row: -1, matchedBy: "none" };
 
   const headers = getHeaders(sheet);
   const idCol = headers.indexOf("id");
   const maCoSoCol = headers.indexOf("Mã cơ sở");
   const accountCol = headers.indexOf("Số tài khoản PCCC");
   const values = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+  const incomingId = safeKey(facility.id);
+  const incomingCode = safeKey(facility.maCoSo);
+  const incomingAccount = normalizeDigits(facility.soTaiKhoanPCCC);
 
-  const keys = [
-    { col: idCol, value: facility.id },
-    { col: maCoSoCol, value: facility.maCoSo },
-    { col: accountCol, value: facility.soTaiKhoanPCCC },
-  ];
-
-  for (const key of keys) {
-    const target = String(key.value || "").trim();
-    if (key.col < 0 || !target) continue;
-
-    const index = values.findIndex((row) => String(row[key.col] || "").trim() === target);
-    if (index >= 0) return index + 2;
+  if (idCol >= 0 && incomingId) {
+    const index = values.findIndex((row) => safeKey(row[idCol]) === incomingId);
+    if (index >= 0) return { row: index + 2, matchedBy: "id" };
   }
 
-  return -1;
+  if (maCoSoCol >= 0 && incomingCode) {
+    const index = values.findIndex((row) => {
+      if (safeKey(row[maCoSoCol]) !== incomingCode) return false;
+      const rowId = idCol >= 0 ? safeKey(row[idCol]) : "";
+      if (!incomingId || rowId === incomingId) return true;
+      if (rowId) return false;
+
+      const rowAccount = accountCol >= 0 ? normalizeDigits(row[accountCol]) : "";
+      return Boolean(incomingAccount && rowAccount && rowAccount === incomingAccount);
+    });
+    if (index >= 0) return { row: index + 2, matchedBy: "maCoSo" };
+  }
+
+  if (accountCol >= 0 && incomingAccount) {
+    const index = values.findIndex((row) => normalizeDigits(row[accountCol]) === incomingAccount);
+    if (index >= 0) return { row: index + 2, matchedBy: "soTaiKhoanPCCC" };
+  }
+
+  return { row: -1, matchedBy: "none" };
+}
+
+function safeKey(value) {
+  return String(value || "").trim();
+}
+
+function logSyncResult(action, mode, matchedBy, targetRow) {
+  console.log(JSON.stringify({ action, mode, matchedBy, targetRow, at: new Date().toISOString() }));
 }
 
 function getHeaders(sheet) {
@@ -315,7 +338,10 @@ const GOOGLE_SHEET_ENDPOINT = "https://script.google.com/macros/s/DEPLOYMENT_ID/
 ## 5. Lưu ý khi cập nhật từ script cũ
 
 - Script mới không dùng append mù.
-- Script mới update/delete theo thứ tự ưu tiên: `id`, `maCoSo`, `soTaiKhoanPCCC`.
+- Script mới update/delete theo thứ tự ưu tiên: `id`, `maCoSo`, `soTaiKhoanPCCC`, nhưng tuyệt đối bỏ qua key rỗng.
+- `UPSERT_FACILITY` chỉ update khi match chắc chắn. Nếu không tìm thấy match thật sự, script luôn dùng `sheet.appendRow(rowValues)`.
+- Script không mặc định `rowIndex = 2`, nên không được ghi đè hàng dữ liệu đầu tiên khi hồ sơ mới chưa tồn tại.
+- Log Apps Script có dạng: `mode = UPDATE/INSERT`, `matchedBy = id/maCoSo/soTaiKhoanPCCC/none`, `targetRow = số dòng`.
 - Nếu sheet cũ chưa có cột `id` hoặc header đang theo mẫu cũ, script sẽ chuẩn hóa hàng header về đúng thứ tự mới. Dữ liệu cũ chưa có giá trị `id`, nên lần đồng bộ đầu tiên có thể cần dựa vào `maCoSo` hoặc `soTaiKhoanPCCC`.
 - Nếu sheet cũ có nhiều dòng trùng từ script cũ, nên rà soát/xóa dòng trùng thủ công một lần trước khi dùng lâu dài.
 - Frontend dùng `fetch(..., { mode: "no-cors" })`, nên không đọc response từ Apps Script. Nếu request không throw lỗi, app coi là đã gửi yêu cầu.
